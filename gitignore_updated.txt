@@ -19,6 +19,7 @@ reports/metropt3_transfer.json
 # ---- Downloaded external datasets (not ours to distribute) ----
 MetroPt3*.txt
 MetroPt3*.csv
+MetroPT3*
 *.zip
 
 # ---- Editors & OS junk ----
@@ -27,4 +28,3 @@ MetroPt3*.csv
 Thumbs.db
 desktop.ini
 .DS_Store
-MetroPT3*
