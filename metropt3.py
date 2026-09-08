@@ -74,6 +74,29 @@ def _in_documented_leak(start_epoch, end_epoch):
     return int(any(start_epoch <= e1 and end_epoch >= e0 for e0, e1 in LEAK_INTERVALS))
 
 
+def tie_aware_auc(scores, labels):
+    """Probability that a random leak-period window outscores a random normal
+    window (0.5 = chance). Average ranks make the result tie-aware and
+    deterministic across machines."""
+    order = np.argsort(scores, kind="stable")
+    sorted_scores = scores[order]
+    sorted_labels = labels[order]
+    ranks = np.empty(len(scores))
+    i = 0
+    while i < len(scores):
+        j = i
+        while j + 1 < len(scores) and sorted_scores[j + 1] == sorted_scores[i]:
+            j += 1
+        ranks[i:j + 1] = (i + j) / 2.0 + 1.0
+        i = j + 1
+    n_pos = int(labels.sum())
+    n_neg = len(labels) - n_pos
+    if n_pos == 0 or n_neg == 0:
+        return None
+    rank_sum_pos = float(ranks[sorted_labels.astype(bool)].sum())
+    return (rank_sum_pos - n_pos * (n_pos + 1) / 2.0) / (n_pos * n_neg)
+
+
 def stream_windows(path, max_rows):
     """Stream the CSV and yield 4-feature windows without holding all rows.
 
@@ -152,14 +175,18 @@ def main():
     rate_in = flagged_in_leak / windows_in_leak if windows_in_leak else None
     rate_out = flagged_outside / windows_outside if windows_outside else None
     base_rate = windows_in_leak / len(leak_flags) if len(leak_flags) else 0.0
-    enrichment = []
-    for pct in (1, 5, 10):
-        k = max(1, int(len(scores) * pct / 100))
-        top = np.argsort(scores)[-k:]
-        share = float(leak_flags[top].mean())
-        enrichment.append({"top_pct": pct, "windows": k,
-                           "leak_window_share": round(share, 4),
-                           "enrichment_vs_base_rate": round(share / base_rate, 2) if base_rate else None})
+    auc = tie_aware_auc(scores, leak_flags.astype(bool))
+    max_score = float(np.max(scores))
+    tie_cluster = scores == max_score
+    tie_windows = int(tie_cluster.sum())
+    tie_leak_share = float(leak_flags[tie_cluster].mean()) if tie_windows else 0.0
+    top_score_cluster = {
+        "score": round(max_score, 6),
+        "windows_at_this_score": tie_windows,
+        "leak_windows_in_cluster": int(leak_flags[tie_cluster].sum()),
+        "leak_window_share": round(tie_leak_share, 4),
+        "lift_vs_base_rate": round(tie_leak_share / base_rate, 2) if base_rate else None,
+    }
 
     report = {
         "project": "FactoryAir Twin", "purpose": "MetroPT-3 transfer demonstration only",
@@ -188,9 +215,13 @@ def main():
             "base_leak_window_rate": round(base_rate, 4),
             "max_score_inside_leak_periods": float(np.max(scores[leak_flags.astype(bool)])) if windows_in_leak else None,
             "max_score_outside_leak_periods": float(np.max(scores[~leak_flags.astype(bool)])) if windows_outside else None,
-            "top_window_enrichment": enrichment,
-            "reading": "Enrichment > 1 means the most anomalous windows concentrate inside the "
-                       "company-documented leak periods more than chance would predict.",
+            "auc_tie_aware": round(auc, 4) if auc is not None else None,
+            "top_score_cluster": top_score_cluster,
+            "reading": ("AUC 0.5 means chance. AUC > 0.5 means leak-period windows "
+                        "tend to score more anomalous. 'Lift > 1' in the top score "
+                        "cluster means documented leaks are over-represented among "
+                        "the most-anomalous windows. Both metrics are tie-aware and "
+                        "reproduce identically on any machine."),
         },
         "limits": [
             "Railway braking compressor; not an SME factory compressor.",
