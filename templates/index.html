@@ -103,6 +103,76 @@
       <p class="muted" id="catalog-note">Monthly figures extrapolate the 30-minute pattern continuously; costs are editable illustrative defaults.</p>
       <div class="table-wrap"><table><caption class="sr-only">Ranked interventions with payback</caption><thead><tr><th>#</th><th>Action</th><th>What to do</th><th>kWh / month</th><th>₹ / month</th><th>kg CO₂e / month</th><th>Assumed cost</th><th>Payback</th></tr></thead><tbody id="catalog-rows"><tr><td colspan="8">Loading catalogue…</td></tr></tbody></table></div>
     </section>
+    <section id="stage4" class="panel optimiser">
+      <div class="panel-heading"><div><p class="eyebrow">STAGE 4 / PRODUCTION READINESS</p><h2>From prototype to plant-ready workflow</h2></div><span class="mode">SIMULATED · OPERATOR-LED</span></div>
+      <div class="optimiser-grid">
+        <div class="opt-card">
+          <h3>1 · Plant setup & calibration</h3>
+          <p>Site calibration values used by Stage 4 checks and reports. Simulation physics stays on the illustrative demo constants.</p>
+          <div class="sched-inputs">
+            <label>Site name<input id="cfg-site" type="text" maxlength="80"></label>
+            <label>Rated kW<input id="cfg-kw" type="number" min="0.5" max="500" step="0.1"></label>
+            <label>Receiver m³<input id="cfg-vol" type="number" min="0.05" max="50" step="0.05"></label>
+            <label>Min pressure bar<input id="cfg-min" type="number" min="4" max="7.5" step="0.1"></label>
+            <label>Cut-in bar<input id="cfg-in" type="number" min="5.5" max="7.5" step="0.1"></label>
+            <label>Cut-out bar<input id="cfg-out" type="number" min="5.5" max="7.5" step="0.1"></label>
+            <label>Max pressure bar<input id="cfg-max" type="number" min="5" max="12" step="0.1"></label>
+            <label>Tariff ₹/kWh<input id="cfg-tariff" type="number" min="0" max="100" step="0.1"></label>
+          </div>
+          <button id="cfg-save" type="button">Save calibration</button>
+          <div id="cfg-result" class="opt-result"></div>
+        </div>
+        <div class="opt-card">
+          <h3>2 · Sensor health monitoring</h3>
+          <p>Checks the raw signal stream for missing, stale, stuck or impossible readings before any AI scoring. Optionally inject synthetic faults to test it.</p>
+          <label>Scenario<select id="health-scenario"><option value="normal">Normal</option><option value="leak">Leak</option><option value="unloaded">Unloaded</option><option value="filter">Filter</option><option value="worn">Worn</option></select></label>
+          <div class="sched-inputs">
+            <label><input id="cor-dropout" type="checkbox"> Dropout</label>
+            <label><input id="cor-stuck" type="checkbox"> Stuck pressure</label>
+            <label><input id="cor-noise" type="checkbox"> Power noise</label>
+            <label><input id="cor-range" type="checkbox"> Range violation</label>
+          </div>
+          <button id="health-run" type="button">Run health check</button>
+          <div id="health-result" class="opt-result"></div>
+        </div>
+        <div class="opt-card">
+          <h3>3 · Fault diagnosis (unknown & multiple faults)</h3>
+          <p>Combines rules + Stage 2 + Stage 3 into one decision: a known fault, overlapping faults, or an unknown anomaly worth manual investigation.</p>
+          <label>Scenario<select id="diag-scenario"><option value="leak">Leak</option><option value="unloaded">Unloaded</option><option value="filter">Filter</option><option value="worn">Worn</option><option value="normal">Normal</option></select></label>
+          <button id="diag-run" type="button">Diagnose scenario</button>
+          <button id="diag-ticket" type="button">Create ticket from diagnosis</button>
+          <div id="diag-result" class="opt-result"></div>
+        </div>
+        <div class="opt-card">
+          <h3>6 · Combined-action savings</h3>
+          <p>Repair + setpoint are measured in ONE combined re-simulation so overlapping savings are never counted twice. Sequencing and scheduling are added separately.</p>
+          <label>Scenario<select id="comb-scenario"><option value="leak">Leak</option><option value="unloaded">Unloaded</option><option value="normal">Normal</option><option value="filter">Filter</option><option value="worn">Worn</option></select></label>
+          <div class="sched-inputs">
+            <label><input id="act-repair" type="checkbox" checked> Repair leak</label>
+            <label><input id="act-setpoint" type="checkbox" checked> Setpoint</label>
+            <label><input id="act-sequence" type="checkbox"> Sequencing</label>
+            <label><input id="act-schedule" type="checkbox"> Scheduling</label>
+          </div>
+          <button id="comb-run" type="button">Calculate combined savings</button>
+          <div id="comb-result" class="opt-result"></div>
+        </div>
+        <div class="opt-card">
+          <h3>7 · Downloadable PDF report</h3>
+          <p>Full prototype summary: calibration, sensor health, diagnosis, energy comparison, combined savings, maintenance history, stress tests, assumptions.</p>
+          <a class="primary" id="pdf-link" href="/api/report/pdf" style="display:inline-block;padding:8px 14px;text-decoration:none">Download PDF report</a>
+          <div id="pdf-note" class="opt-result"><p class="muted">Generated on demand · labelled SIMULATED on every page.</p></div>
+        </div>
+        <div class="opt-card">
+          <h3>8 · Stress-test mode</h3>
+          <p>Battery of hostile conditions: sensor dropouts, stuck transmitter, heavy noise, a 25% demand jump, and leak + filter at the same time.</p>
+          <button id="stress-run" type="button">Run full stress battery</button>
+          <div id="stress-result" class="opt-result"></div>
+        </div>
+      </div>
+      <h3 class="catalog-heading">4 & 5 · Maintenance workflow & post-repair verification</h3>
+      <p class="muted">Tickets persist in <code>data/maintenance.json</code>. Lifecycle: open → acknowledged → in_repair → verifying → resolved, with a full operator log. Verification compares matched before/after simulated runs.</p>
+      <div class="table-wrap"><table><caption class="sr-only">Maintenance tickets</caption><thead><tr><th>ID</th><th>Fault</th><th>Title</th><th>State</th><th>Verification</th><th>Actions</th></tr></thead><tbody id="ticket-rows"><tr><td colspan="6">Loading tickets…</td></tr></tbody></table></div>
+    </section>
     <section id="validation" class="panel validation">
       <div class="panel-heading"><div><p class="eyebrow">MODEL EVALUATION / SIMULATED DATA</p><h2>How well did the detectors perform?</h2></div><button id="download-report" type="button" disabled>Download Stage 2 report</button></div>
       <p id="validation-message">Train the local model to see results from separate test runs.</p>

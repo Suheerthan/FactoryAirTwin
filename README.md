@@ -321,6 +321,21 @@ After you can run and explain this version:
 - **No compatible package wheel:** check the package's Python support; a separate
   Python 3.12 or 3.13 environment is an alternative to building packages manually.
 
+## Stage 4 — production-readiness layer
+
+Stage 4 adds a calibration panel, sensor-health monitoring, unknown/multiple
+fault handling, a persistent maintenance workflow with measured post-repair
+verification, a double-count-proof combined savings calculator, a
+downloadable PDF report and a stress-test mode. Details: **STAGE4.md**.
+
+One extra dependency for the PDF report:
+
+```
+.\.venv\Scripts\python.exe -m pip install fpdf2
+```
+
+No model retraining is needed: the simulator's Stage 3 behaviour is unchanged.
+
 ## References for the next learning steps
 
 - Flask installation: https://flask.palletsprojects.com/en/stable/installation/

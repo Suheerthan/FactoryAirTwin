@@ -4,10 +4,15 @@ import math
 
 from flask import Flask, jsonify, render_template, request
 
+from flask import send_file
+
 from simulator import SCENARIOS, compare_runs, run_simulation
 from ai_detector import infer_readings, model_status
 from ai_stage3 import infer_stage3, stage3_status
 from optimizer import compare_sequences, intervention_catalog, schedule_savings, setpoint_search
+from stage4 import (ACTIONS, STRESS_PROFILES, build_pdf_report, combined_savings, corrupt_readings,
+                    create_ticket, diagnose_scenario, get_config, get_ticket, list_tickets,
+                    run_stress, sensor_health, ticket_action, update_config, verify_ticket)
 
 
 app = Flask(__name__)
@@ -42,7 +47,8 @@ def index():
 @app.get("/api/health")
 def health():
     return jsonify(status="ok", application="FactoryAir Twin",
-                   stage="simulator + rules + Stage 2 anomaly detector + Stage 3 optimiser & fault classifier")
+                   stage="simulator + rules + Stage 2 anomaly detector + Stage 3 optimiser & fault classifier"
+                         " + Stage 4 production-readiness layer")
 
 
 @app.get("/api/ai/status")
@@ -175,6 +181,147 @@ def connectivity_sample():
                                 "panel; pressure and state come from the controller. Analytics stays on "
                                 "the edge device and only recommendations require operator approval."),
     })
+
+
+# ================================================================ STAGE 4
+@app.get("/api/stage4/status")
+def stage4_status():
+    tickets = list_tickets()
+    return jsonify(stage="Stage 4 production readiness", data_mode="simulation",
+                   config=get_config(), stress_profiles=list(STRESS_PROFILES),
+                   workflow_actions=list(ACTIONS),
+                   tickets={"total": len(tickets),
+                            "by_state": {s: sum(t["state"] == s for t in tickets)
+                                         for s in ("open", "acknowledged", "in_repair", "verifying",
+                                                   "resolved", "cancelled")}})
+
+
+@app.get("/api/stage4/config")
+def stage4_config_get():
+    return jsonify(get_config())
+
+
+@app.post("/api/stage4/config")
+def stage4_config_update():
+    config, error = update_config(payload())
+    if error:
+        return jsonify(error=error), 400
+    return jsonify(config)
+
+
+@app.post("/api/stage4/sensorhealth")
+def stage4_sensorhealth():
+    try:
+        scenario, _ = options()
+        corruptions = payload().get("corruptions", [])
+        run = run_simulation(scenario)
+        readings = corrupt_readings(run["readings"], corruptions) if corruptions else run["readings"]
+        report = sensor_health(readings, get_config())
+        report["scenario"] = scenario
+        report["corruptions_applied"] = list(corruptions) if corruptions else []
+        return jsonify(report)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.post("/api/stage4/diagnose")
+def stage4_diagnose():
+    try:
+        data = payload()
+        scenario = data.get("scenario", "leak")
+        if scenario not in SCENARIOS:
+            raise ValueError("Choose normal, leak, unloaded, filter or worn.")
+        state, run = diagnose_scenario(scenario)
+        return jsonify({"diagnosis": state, "energy_kwh_30min": run["summary"]["energy_kwh"],
+                        "alerts": [{"key": a["key"], "title": a["title"], "second": a["second"]}
+                                   for a in run["alerts"]]})
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.post("/api/stage4/ticket/from-diagnosis")
+def stage4_ticket_from_diagnosis():
+    try:
+        data = payload()
+        scenario = data.get("scenario", "leak")
+        if scenario not in SCENARIOS or scenario == "normal":
+            raise ValueError("Run the diagnosis on a fault scenario first.")
+        state, run = diagnose_scenario(scenario)
+        fault = state["faults"][0] if state["faults"] else "unknown"
+        leak_alert = next((a for a in run["alerts"] if a["key"] == "leak"), None)
+        predicted = leak_alert.get("impact", {}) if leak_alert else {}
+        predicted_payload = ({"inr_per_month": predicted.get("inr_per_month"),
+                              "kwh_per_day": predicted.get("kwh_per_day")} if predicted else {})
+        ticket = create_ticket(fault, f"{scenario.title()} fault - {state['state']}",
+                               evidence=state["explanation"], predicted=predicted_payload,
+                               operator=data.get("operator", "operator"))
+        return jsonify(ticket)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.get("/api/maintenance/tickets")
+def maintenance_list():
+    return jsonify(list_tickets())
+
+
+@app.post("/api/maintenance/tickets")
+def maintenance_create():
+    try:
+        data = payload()
+        return jsonify(create_ticket(data.get("fault_type", "unknown"), data.get("title", "Manual ticket"),
+                                     evidence=data.get("evidence", ""), predicted=data.get("predicted"),
+                                     operator=data.get("operator", "operator")))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.post("/api/maintenance/tickets/<ticket_id>/action")
+def maintenance_action(ticket_id):
+    try:
+        data = payload()
+        return jsonify(ticket_action(ticket_id, data.get("action", ""), data.get("operator", "operator"),
+                                     data.get("note", "")))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.post("/api/maintenance/tickets/<ticket_id>/verify")
+def maintenance_verify(ticket_id):
+    try:
+        return jsonify(verify_ticket(ticket_id, payload().get("operator", "operator")))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.post("/api/optimise/combined")
+def optimise_combined():
+    try:
+        data = payload()
+        scenario = data.get("scenario", "leak")
+        actions = data.get("actions", ["repair_leak", "setpoint"])
+        if not isinstance(actions, list) or not actions:
+            raise ValueError("Pick at least one action: repair_leak, setpoint, sequencing, scheduling.")
+        result = combined_savings(scenario, actions)
+        return jsonify(result)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.post("/api/stage4/stress")
+def stage4_stress():
+    try:
+        data = payload()
+        return jsonify(run_stress(data.get("tests"), data.get("seed", 4400)))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.get("/api/report/pdf")
+def report_pdf():
+    path = build_pdf_report()
+    return send_file(path, as_attachment=True, download_name="FactoryAirTwin_SIMULATED_report.pdf",
+                     mimetype="application/pdf")
 
 
 if __name__ == "__main__":

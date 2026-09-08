@@ -397,3 +397,174 @@ $("schedule-run").addEventListener("click",runSchedule);
 $("load-sample").addEventListener("click",loadSample);
 loadModelStatus();
 loadScenario();
+
+/* ------------------------------ Stage 4 panels ------------------------------ */
+
+async function api2(url, body, method = "POST") {
+  const response = await fetch(url, method === "POST" ? {
+    method, headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})
+  } : {method});
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Request failed (${response.status}).`);
+  return data;
+}
+
+async function loadStage4() {
+  try {
+    const cfg = await api2("/api/stage4/config", null, "GET");
+    $("cfg-site").value = cfg.site_name || "";
+    $("cfg-kw").value = cfg.rated_power_kw; $("cfg-vol").value = cfg.receiver_volume_m3;
+    $("cfg-min").value = cfg.min_pressure_bar; $("cfg-in").value = cfg.cut_in_bar;
+    $("cfg-out").value = cfg.cut_out_bar; $("cfg-max").value = cfg.max_pressure_bar;
+    $("cfg-tariff").value = cfg.tariff_inr_kwh;
+  } catch (error) { resultBox("cfg-result", error.message); }
+  refreshTickets();
+}
+
+async function saveConfig() {
+  try {
+    const cfg = await api2("/api/stage4/config", {
+      site_name: $("cfg-site").value, rated_power_kw: Number($("cfg-kw").value),
+      receiver_volume_m3: Number($("cfg-vol").value), min_pressure_bar: Number($("cfg-min").value),
+      cut_in_bar: Number($("cfg-in").value), cut_out_bar: Number($("cfg-out").value),
+      max_pressure_bar: Number($("cfg-max").value), tariff_inr_kwh: Number($("cfg-tariff").value)
+    });
+    resultBox("cfg-result", `Saved ✔ Calibration stored for <strong>${cfg.site_name}</strong> (updated ${cfg.updated_at}).`);
+  } catch (error) { resultBox("cfg-result", error.message); }
+}
+
+async function runHealth() {
+  const corruptions = [];
+  if ($("cor-dropout").checked) corruptions.push("dropout");
+  if ($("cor-stuck").checked) corruptions.push("stuck_pressure");
+  if ($("cor-noise").checked) corruptions.push("power_noise");
+  if ($("cor-range").checked) corruptions.push("range_violation");
+  resultBox("health-result", "Checking the signal stream…");
+  try {
+    const r = await api2("/api/stage4/sensorhealth", {scenario: $("health-scenario").value, corruptions});
+    const badge = {ok: "🟢 OK", degraded: "🟡 DEGRADED", failed: "🔴 FAILED"}[r.overall] || r.overall;
+    let html = `<strong>${badge}</strong> · ${r.samples_checked} samples · sensors: ` +
+      Object.entries(r.sensors).map(([k, s]) => `${k.split("_")[0]} ${s.status}`).join(" · ") + "<br>";
+    html += r.issues.length ? r.issues.map(i => `• ${i}`).join("<br>") : "• No quality problems found.";
+    if (r.corruptions_applied.length) html += `<br><small>Injected faults: ${r.corruptions_applied.join(", ")}</small>`;
+    resultBox("health-result", html);
+  } catch (error) { resultBox("health-result", error.message); }
+}
+
+async function runDiagnose(createTicket = false) {
+  const scenario = $("diag-scenario").value;
+  resultBox("diag-result", createTicket ? "Creating ticket from diagnosis…" : "Diagnosing…");
+  try {
+    const r = await api2("/api/stage4/diagnose", {scenario});
+    const d = r.diagnosis;
+    const badge = {known: "🎯 KNOWN FAULT", multiple: "🧩 MULTIPLE FAULTS", unknown: "❓ UNKNOWN ANOMALY", normal: "🟢 NORMAL"}[d.state] || d.state;
+    let html = `<strong>${badge}</strong> · confidence ${fmt(d.confidence, 2)}<br>${d.explanation}<br>` +
+      `<small>Rules fired: ${d.rule_keys.join(", ") || "none"} · AI-flagged windows: ${d.ai_flagged_windows} · anomaly ratio: ${fmt(d.anomaly_ratio, 2)}</small>`;
+    if (createTicket) {
+      if (scenario === "normal") throw new Error("Run the diagnosis on a fault scenario first.");
+      const t = await api2("/api/stage4/ticket/from-diagnosis", {scenario});
+      html += `<br><strong>Ticket ${t.id} created</strong> (${t.fault_type}) — see the maintenance table below.`;
+      refreshTickets();
+    }
+    resultBox("diag-result", html);
+  } catch (error) { resultBox("diag-result", error.message); }
+}
+
+const NEXT_ACTIONS = {
+  open: [["acknowledge", "Acknowledge"]],
+  acknowledged: [["start_repair", "Start repair"], ["cancel", "Cancel"]],
+  in_repair: [["verify", "Verify repair ✔"], ["cancel", "Cancel"]],
+  verifying: [["resolve", "Resolve"]],
+  resolved: [["reopen", "Reopen"]],
+  cancelled: [["reopen", "Reopen"]]
+};
+
+async function refreshTickets() {
+  try {
+    const tickets = await api2("/api/maintenance/tickets", null, "GET");
+    const tbody = $("ticket-rows");
+    tbody.replaceChildren();
+    if (!tickets.length) {
+      const row = document.createElement("tr"), c = document.createElement("td");
+      c.colSpan = 6; c.textContent = "No tickets yet. Diagnose a fault scenario and create one.";
+      row.append(c); tbody.append(row); return;
+    }
+    tickets.slice().reverse().forEach(t => {
+      const row = document.createElement("tr");
+      const verification = t.verification
+        ? (t.verification.status === "measured_simulated"
+          ? `Saved ${t.verification.saved_kwh_30min} kWh/30 min ≈ ₹${inr(t.verification.saved_inr_per_month)}/mo` +
+            (t.verification.deviation_pct_vs_predicted != null ? ` (${t.verification.deviation_pct_vs_predicted}% vs predicted)` : "")
+          : t.verification.message || t.verification.status)
+        : "—";
+      const cells = [t.id, t.fault_type, t.title, t.state, verification];
+      cells.forEach(text => { const c = document.createElement("td"); c.textContent = text; row.append(c); });
+      const actionsCell = document.createElement("td");
+      (NEXT_ACTIONS[t.state] || []).forEach(([action, label]) => {
+        const b = document.createElement("button"); b.type = "button"; b.textContent = label;
+        b.addEventListener("click", () => ticketAct(t.id, action));
+        actionsCell.append(b, " ");
+      });
+      row.append(actionsCell);
+      row.title = `Logs: ${t.logs.map(l => `${l.at} ${l.operator} ${l.action}${l.note ? " — " + l.note : ""}`).join(" | ")}`;
+      tbody.append(row);
+    });
+  } catch (error) {
+    $("ticket-rows").replaceChildren();
+    resultBox("cfg-result", error.message);
+  }
+}
+
+async function ticketAct(id, action) {
+  try {
+    if (action === "verify") {
+      const v = await api2(`/api/maintenance/tickets/${id}/verify`, {operator: "dashboard"});
+      const message = v.status === "measured_simulated"
+        ? `Verified: saved ${v.saved_kwh_30min} kWh per 30 min ≈ ₹${inr(v.saved_inr_per_month)}/month.`
+        : v.message;
+      resultBox("comb-result", `<strong>${id}:</strong> ${message}`);
+    } else {
+      await api2(`/api/maintenance/tickets/${id}/action`, {action, operator: "dashboard"});
+    }
+    refreshTickets();
+  } catch (error) { resultBox("comb-result", error.message); }
+}
+
+async function runCombined() {
+  const actions = [];
+  if ($("act-repair").checked) actions.push("repair_leak");
+  if ($("act-setpoint").checked) actions.push("setpoint");
+  if ($("act-sequence").checked) actions.push("sequencing");
+  if ($("act-schedule").checked) actions.push("scheduling");
+  if (!actions.length) { resultBox("comb-result", "Pick at least one action."); return; }
+  resultBox("comb-result", "Running the combined re-simulation…");
+  try {
+    const r = await api2("/api/optimise/combined", {scenario: $("comb-scenario").value, actions});
+    let html = `<strong>Total ≈ ₹${inr(r.total_inr_per_month)}/month</strong> · ${inr(r.total_co2_kg_per_month)} kg CO₂e/month · compliance ${fmt(r.pressure_compliance_pct, 1)}%<br>`;
+    r.parts.forEach(p => { html += `• ${p.action}: ${p.inr_per_month != null ? "₹" + inr(p.inr_per_month) + "/month" : "n/a"}<br>`; });
+    html += `<small>${r.double_counting_note}</small>`;
+    resultBox("comb-result", html);
+  } catch (error) { resultBox("comb-result", error.message); }
+}
+
+async function runStress() {
+  resultBox("stress-result", "Running 5 stress scenarios (physics + corruption + detection)…");
+  try {
+    const r = await api2("/api/stage4/stress", {});
+    let html = `<table><thead><tr><th>Test</th><th>Health</th><th>Alerts</th><th>Diagnosis</th></tr></thead><tbody>`;
+    r.results.forEach(x => {
+      const badge = {ok: "🟢", degraded: "🟡", failed: "🔴"}[x.health_overall] || "";
+      html += `<tr><td>${x.test}<br><small>${x.description}</small></td><td>${badge} ${x.health_overall}</td><td>${x.alerts_raised.join(", ") || "—"}</td><td>${x.diagnosis_state}${x.diagnosis_faults.length ? " (" + x.diagnosis_faults.join("+") + ")" : ""}</td></tr>`;
+    });
+    html += `</tbody></table><small>${r.note}</small>`;
+    resultBox("stress-result", html);
+  } catch (error) { resultBox("stress-result", error.message); }
+}
+
+$("cfg-save").addEventListener("click", saveConfig);
+$("health-run").addEventListener("click", runHealth);
+$("diag-run").addEventListener("click", () => runDiagnose(false));
+$("diag-ticket").addEventListener("click", () => runDiagnose(true));
+$("comb-run").addEventListener("click", runCombined);
+$("stress-run").addEventListener("click", runStress);
+loadStage4();

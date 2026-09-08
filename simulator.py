@@ -192,11 +192,15 @@ def detect_alerts(rows, tariff=7.0):
 
 
 def run_simulation(scenario="normal", intervention=False, tariff=7.0, *, variation_seed=None, fault_start=0,
-                   cut_in_bar=None, cut_out_bar=None):
+                   cut_in_bar=None, cut_out_bar=None, secondary_fault=None, demand_multiplier=None):
     if scenario not in SCENARIOS:
         raise ValueError("Choose normal, leak, unloaded, filter or worn.")
     if not isinstance(fault_start, int) or not 0 <= fault_start <= PLANT.duration_seconds:
         raise ValueError("fault_start must be a second within the simulation.")
+    if secondary_fault not in (None, "filter", "worn"):
+        raise ValueError("secondary_fault must be None, 'filter' or 'worn'.")
+    if demand_multiplier is not None and (isinstance(demand_multiplier, bool) or not 0.1 <= demand_multiplier <= 3.0):
+        raise ValueError("demand_multiplier must be between 0.1 and 3.0.")
     for name, override in (("cut_in_bar", cut_in_bar), ("cut_out_bar", cut_out_bar)):
         if override is not None and (isinstance(override, bool) or not isinstance(override, (int, float))
                                      or not 5.5 <= override <= 7.5):
@@ -253,17 +257,24 @@ def run_simulation(scenario="normal", intervention=False, tariff=7.0, *, variati
             demand = 0.45 * demand_scale * (1 + 0.10 * sin(t / 37)) if active else 0.0
         else:
             demand, active = demand_at(t)
+        if demand_multiplier is not None:
+            demand *= demand_multiplier
         is_fault_active = scenario != "normal" and not intervention and t >= fault_start
         current_leak = leak_rate if is_fault_active else healthy_leak
         current_delay = stop_delay if is_fault_active else healthy_delay
         # Stage 3 fault physics: filter clog progressively restricts inlet
-        # flow; wear degrades flow and raises power at all times.
+        # flow; wear degrades flow and raises power at all times. Stage 4
+        # stress mode can layer a secondary fault on top of the primary one.
         clog_factor, wear_flow, wear_power = 1.0, 1.0, 1.0
-        if is_fault_active:
-            if scenario == "filter":
-                clog_factor = max(0.75, 1.0 - 0.25 * min(1.0, (t - fault_start) / 300))
-            elif scenario == "worn":
-                wear_flow, wear_power = 0.88, 1.06
+        active_faults = set()
+        if is_fault_active and scenario in ("filter", "worn"):
+            active_faults.add(scenario)
+        if secondary_fault and t >= fault_start:
+            active_faults.add(secondary_fault)
+        if "filter" in active_faults:
+            clog_factor = max(0.75, 1.0 - 0.25 * min(1.0, (t - fault_start) / 300))
+        if "worn" in active_faults:
+            wear_flow, wear_power = 0.88, 1.06
         if p <= cut_in:
             state, idle_seconds = "Loaded", 0
         elif state == "Loaded" and p >= cut_out:
