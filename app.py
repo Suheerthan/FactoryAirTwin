@@ -1,5 +1,6 @@
 r"""Run with: .\.venv\Scripts\python.exe app.py (Windows)."""
 
+import io
 import math
 
 from flask import Flask, jsonify, render_template, request
@@ -10,13 +11,15 @@ from simulator import SCENARIOS, compare_runs, run_simulation
 from ai_detector import infer_readings, model_status
 from ai_stage3 import infer_stage3, stage3_status
 from optimizer import compare_sequences, intervention_catalog, schedule_savings, setpoint_search
-from stage4 import (ACTIONS, STRESS_PROFILES, build_pdf_report, combined_savings, corrupt_readings,
+from stage4 import (ACTIONS, ACTION_PERMISSIONS, ROLE_LABELS, ROLE_PERMISSIONS, STRESS_PROFILES,
+                    build_backup, build_pdf_report, combined_savings, corrupt_readings,
                     create_ticket, diagnose_scenario, get_config, get_ticket, list_tickets,
-                    run_stress, sensor_health, ticket_action, update_config, verify_ticket)
+                    model_history, require_role, restore_backup, run_stress, sensor_health,
+                    ticket_action, update_config, verify_ticket)
 
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 4096
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024  # small JSON-state uploads (backup restore) only
 
 
 def options():
@@ -184,12 +187,25 @@ def connectivity_sample():
 
 
 # ================================================================ STAGE 4
+def gate(permission):
+    """Resolve the caller's role (JSON body or ?role=) and enforce permission.
+
+    The default role is 'manager' so the prototype keeps working if a client
+    sends no role at all; the dashboard always sends one explicitly."""
+    data = request.get_json(silent=True) or {}
+    role = request.args.get("role") or (data.get("role") if isinstance(data, dict) else None) or "manager"
+    label = require_role(role, permission)
+    return role, label, data
+
+
 @app.get("/api/stage4/status")
 def stage4_status():
     tickets = list_tickets()
-    return jsonify(stage="Stage 4 production readiness", data_mode="simulation",
+    return jsonify(stage="Stage 4 production readiness + 4.5 polish", data_mode="simulation",
                    config=get_config(), stress_profiles=list(STRESS_PROFILES),
                    workflow_actions=list(ACTIONS),
+                   roles={name: sorted(perms) for name, perms in ROLE_PERMISSIONS.items()},
+                   role_labels=ROLE_LABELS,
                    tickets={"total": len(tickets),
                             "by_state": {s: sum(t["state"] == s for t in tickets)
                                          for s in ("open", "acknowledged", "in_repair", "verifying",
@@ -203,17 +219,25 @@ def stage4_config_get():
 
 @app.post("/api/stage4/config")
 def stage4_config_update():
-    config, error = update_config(payload())
-    if error:
-        return jsonify(error=error), 400
-    return jsonify(config)
+    try:
+        role, label, data = gate("config")
+        changes = {k: v for k, v in data.items() if k not in ("role", "operator")}
+        config, error = update_config(changes)
+        if error:
+            return jsonify(error=error), 400
+        return jsonify(config)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 403
 
 
 @app.post("/api/stage4/sensorhealth")
 def stage4_sensorhealth():
     try:
-        scenario, _ = options()
-        corruptions = payload().get("corruptions", [])
+        role, label, data = gate("sensorhealth")
+        scenario = data.get("scenario", "normal")
+        if scenario not in SCENARIOS:
+            raise ValueError("Choose normal, leak, unloaded, filter or worn.")
+        corruptions = data.get("corruptions", [])
         run = run_simulation(scenario)
         readings = corrupt_readings(run["readings"], corruptions) if corruptions else run["readings"]
         report = sensor_health(readings, get_config())
@@ -227,7 +251,7 @@ def stage4_sensorhealth():
 @app.post("/api/stage4/diagnose")
 def stage4_diagnose():
     try:
-        data = payload()
+        role, label, data = gate("diagnose")
         scenario = data.get("scenario", "leak")
         if scenario not in SCENARIOS:
             raise ValueError("Choose normal, leak, unloaded, filter or worn.")
@@ -236,13 +260,13 @@ def stage4_diagnose():
                         "alerts": [{"key": a["key"], "title": a["title"], "second": a["second"]}
                                    for a in run["alerts"]]})
     except ValueError as exc:
-        return jsonify(error=str(exc)), 400
+        return jsonify(error=str(exc)), 403
 
 
 @app.post("/api/stage4/ticket/from-diagnosis")
 def stage4_ticket_from_diagnosis():
     try:
-        data = payload()
+        role, label, data = gate("create_ticket")
         scenario = data.get("scenario", "leak")
         if scenario not in SCENARIOS or scenario == "normal":
             raise ValueError("Run the diagnosis on a fault scenario first.")
@@ -252,12 +276,13 @@ def stage4_ticket_from_diagnosis():
         predicted = leak_alert.get("impact", {}) if leak_alert else {}
         predicted_payload = ({"inr_per_month": predicted.get("inr_per_month"),
                               "kwh_per_day": predicted.get("kwh_per_day")} if predicted else {})
+        operator = f"{data.get('operator', 'operator')} ({label})"
         ticket = create_ticket(fault, f"{scenario.title()} fault - {state['state']}",
                                evidence=state["explanation"], predicted=predicted_payload,
-                               operator=data.get("operator", "operator"))
+                               operator=operator)
         return jsonify(ticket)
     except ValueError as exc:
-        return jsonify(error=str(exc)), 400
+        return jsonify(error=str(exc)), 403
 
 
 @app.get("/api/maintenance/tickets")
@@ -268,60 +293,95 @@ def maintenance_list():
 @app.post("/api/maintenance/tickets")
 def maintenance_create():
     try:
-        data = payload()
+        role, label, data = gate("create_ticket")
+        operator = f"{data.get('operator', 'operator')} ({label})"
         return jsonify(create_ticket(data.get("fault_type", "unknown"), data.get("title", "Manual ticket"),
                                      evidence=data.get("evidence", ""), predicted=data.get("predicted"),
-                                     operator=data.get("operator", "operator")))
+                                     operator=operator))
     except ValueError as exc:
-        return jsonify(error=str(exc)), 400
+        return jsonify(error=str(exc)), 403
 
 
 @app.post("/api/maintenance/tickets/<ticket_id>/action")
 def maintenance_action(ticket_id):
     try:
-        data = payload()
-        return jsonify(ticket_action(ticket_id, data.get("action", ""), data.get("operator", "operator"),
-                                     data.get("note", "")))
+        role, label, data = gate("view")
+        action = data.get("action", "")
+        if action not in ACTIONS:
+            raise ValueError(f"Unknown action. Use one of: {', '.join(ACTIONS)}.")
+        require_role(role, ACTION_PERMISSIONS[action])
+        operator = f"{data.get('operator', 'operator')} ({label})"
+        return jsonify(ticket_action(ticket_id, action, operator, data.get("note", "")))
     except ValueError as exc:
-        return jsonify(error=str(exc)), 400
+        return jsonify(error=str(exc)), 403
 
 
 @app.post("/api/maintenance/tickets/<ticket_id>/verify")
 def maintenance_verify(ticket_id):
     try:
-        return jsonify(verify_ticket(ticket_id, payload().get("operator", "operator")))
+        role, label, data = gate("verify")
+        return jsonify(verify_ticket(ticket_id, f"{data.get('operator', 'operator')} ({label})"))
     except ValueError as exc:
-        return jsonify(error=str(exc)), 400
+        return jsonify(error=str(exc)), 403
 
 
 @app.post("/api/optimise/combined")
 def optimise_combined():
     try:
-        data = payload()
+        role, label, data = gate("combined")
         scenario = data.get("scenario", "leak")
         actions = data.get("actions", ["repair_leak", "setpoint"])
         if not isinstance(actions, list) or not actions:
             raise ValueError("Pick at least one action: repair_leak, setpoint, sequencing, scheduling.")
-        result = combined_savings(scenario, actions)
-        return jsonify(result)
+        return jsonify(combined_savings(scenario, actions))
     except ValueError as exc:
-        return jsonify(error=str(exc)), 400
+        return jsonify(error=str(exc)), 403
 
 
 @app.post("/api/stage4/stress")
 def stage4_stress():
     try:
-        data = payload()
+        role, label, data = gate("stress")
         return jsonify(run_stress(data.get("tests"), data.get("seed", 4400)))
     except ValueError as exc:
-        return jsonify(error=str(exc)), 400
+        return jsonify(error=str(exc)), 403
 
 
 @app.get("/api/report/pdf")
 def report_pdf():
+    try:
+        gate("report")
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 403
     path = build_pdf_report()
     return send_file(path, as_attachment=True, download_name="FactoryAirTwin_SIMULATED_report.pdf",
                      mimetype="application/pdf")
+
+
+@app.get("/api/stage4/backup")
+def stage4_backup():
+    gate("view")
+    blob = build_backup()
+    return send_file(io.BytesIO(blob), as_attachment=True,
+                     download_name="FactoryAirTwin_backup.zip", mimetype="application/zip")
+
+
+@app.post("/api/stage4/restore")
+def stage4_restore():
+    try:
+        role, label, _data = gate("restore")
+        upload = request.files.get("backup")
+        if upload is None:
+            raise ValueError("Attach the backup ZIP as a form field named 'backup'.")
+        restored = restore_backup(upload.read())
+        return jsonify(restored=restored, by=f"{_data.get('operator', 'manager')} ({label})")
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 403
+
+
+@app.get("/api/stage4/modelhistory")
+def stage4_modelhistory():
+    return jsonify(model_history())
 
 
 if __name__ == "__main__":

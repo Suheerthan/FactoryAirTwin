@@ -617,3 +617,136 @@ def build_pdf_report(path=None):
 
     pdf.output(str(path))
     return path
+
+
+# =====================================================================
+# Stage 4.5 additions: roles, backup/restore, model version history.
+# =====================================================================
+import io
+import zipfile
+
+ROLE_PERMISSIONS = {
+    # A local prototype has no real authentication; roles demonstrate the
+    # workflow split that a plant deployment would enforce.
+    "operator": {"view", "create_ticket", "acknowledge"},
+    "maintenance_engineer": {"view", "create_ticket", "acknowledge", "start_repair",
+                             "verify", "resolve", "cancel", "reopen",
+                             "diagnose", "combined", "sensorhealth"},
+    "manager": {"view", "create_ticket", "acknowledge", "start_repair", "verify",
+                "resolve", "cancel", "reopen", "diagnose", "combined", "sensorhealth",
+                "config", "stress", "report", "restore", "backup"},
+}
+ROLE_LABELS = {"operator": "Operator", "maintenance_engineer": "Maintenance engineer",
+               "manager": "Plant manager"}
+ACTION_PERMISSIONS = {"acknowledge": "acknowledge", "start_repair": "start_repair",
+                      "verify": "verify", "resolve": "resolve",
+                      "cancel": "cancel", "reopen": "reopen"}
+
+
+def require_role(role, permission):
+    """Raise ValueError unless `role` exists and holds `permission`."""
+    if role not in ROLE_PERMISSIONS:
+        raise ValueError(f"Unknown role '{role}'. Choose one of: "
+                         + ", ".join(ROLE_PERMISSIONS) + ".")
+    if permission not in ROLE_PERMISSIONS[role]:
+        raise ValueError(f"Role '{ROLE_LABELS[role]}' is not allowed to '{permission}'. "
+                         "Switch to a role that holds this permission.")
+    return ROLE_LABELS[role]
+
+
+_BACKUP_NAMES = {
+    "plant_config.json": CONFIG_PATH,
+    "maintenance.json": TICKETS_PATH,
+    "validation_report.json": BASE_DIR / "reports" / "validation_report.json",
+    "stage3_validation.json": BASE_DIR / "reports" / "stage3_validation.json",
+    "metropt3_transfer.json": BASE_DIR / "reports" / "metropt3_transfer.json",
+}
+
+
+def build_backup():
+    """Zip the persistent state (calibration, tickets, reports) in memory."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as bundle:
+        bundle.writestr("backup_info.json", json.dumps(
+            {"project": "FactoryAir Twin", "created_at": _now(),
+             "contents": sorted(_BACKUP_NAMES), "note": "Simulated prototype state only."},
+            indent=2))
+        for name, path in _BACKUP_NAMES.items():
+            if path.exists():
+                bundle.writestr(name, path.read_text(encoding="utf-8"))
+    return buffer.getvalue()
+
+
+def restore_backup(payload_bytes):
+    """Validate and restore a backup zip. Only whitelisted JSON files are
+    accepted; every file must parse as JSON before anything is written."""
+    buffer = io.BytesIO(payload_bytes)
+    try:
+        bundle = zipfile.ZipFile(buffer)
+    except zipfile.BadZipFile:
+        raise ValueError("The uploaded file is not a valid ZIP backup.")
+    names = set(bundle.namelist())
+    unknown = names - set(_BACKUP_NAMES) - {"backup_info.json"}
+    if unknown:
+        raise ValueError(f"Backup contains unexpected files: {sorted(unknown)}.")
+    staged = {}
+    for name in names & set(_BACKUP_NAMES):
+        raw = bundle.read(name).decode("utf-8")
+        try:
+            json.loads(raw)  # must be valid JSON before writing anything
+        except ValueError:
+            raise ValueError(f"Backup file {name} is not valid JSON; restore aborted.")
+        staged[name] = raw
+    if not staged:
+        raise ValueError("Backup contains no restorable state files.")
+    for name, raw in staged.items():
+        path = _BACKUP_NAMES[name]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(raw, encoding="utf-8")
+    return sorted(staged)
+
+
+def model_history():
+    """Read-only history: when each local model was trained, by which
+    scikit-learn version, and its recorded evaluation summary."""
+    import ai_detector
+    import ai_stage3
+
+    history = []
+    for entry in (
+        {"model": "Stage 2 — Isolation Forest (unsupervised anomaly baseline)",
+         "bundle_loader": ai_detector.load_local_bundle,
+         "model_path": ai_detector.MODEL_PATH, "report_path": ai_detector.REPORT_PATH,
+         "metric_keys": ("macro_f1", "f1", "precision", "recall",
+                         "events_detected", "false_alarm_episodes")},
+        {"model": "Stage 3 — RandomForest fault-type classifier",
+         "bundle_loader": ai_stage3.load_stage3_bundle,
+         "model_path": ai_stage3.STAGE3_MODEL_PATH, "report_path": ai_stage3.STAGE3_REPORT_PATH,
+         "metric_keys": ("macro_f1", "events_detected", "median_detection_delay_seconds",
+                         "normal_run_false_alarm_episodes")},
+    ):
+        record = {"model": entry["model"], "trained": False}
+        bundle, message = entry["bundle_loader"]()
+        if bundle is None:
+            record["note"] = message
+            history.append(record)
+            continue
+        record.update({"trained": True, "trained_at": bundle.get("trained_at"),
+                       "method": bundle.get("method", ""),
+                       "sklearn_version": bundle.get("sklearn_version")})
+        if entry["model_path"].exists():
+            record["model_file_modified_utc"] = datetime.fromtimestamp(
+                entry["model_path"].stat().st_mtime, tz=timezone.utc).isoformat(timespec="seconds")
+        try:
+            report = json.loads(entry["report_path"].read_text(encoding="utf-8"))
+            record["evaluation"] = {k: report[k] for k in entry["metric_keys"] if k in report}
+            if "per_class" in report:
+                record["evaluation"]["per_class_f1"] = {
+                    cls: round(vals.get("f1", 0.0), 4)
+                    for cls, vals in report.get("per_class", {}).items()}
+        except (OSError, ValueError):
+            record["evaluation"] = None
+        history.append(record)
+    return {"history": history,
+            "note": "Retrain with train_model.py / train_stage3.py; this page reads the "
+                    "timestamps and reports those scripts produce. Nothing is uploaded anywhere."}

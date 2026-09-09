@@ -80,3 +80,23 @@ health detection of stuck/missing/range/gap faults, fault-state decisions,
 full ticket lifecycle + invalid transitions, measured verification,
 combined-vs-standalone arithmetic, guardrails, stress determinism and PDF
 generation. Full suite: **64 tests, all passing**.
+
+## Stage 4.5 polish (roles · backup · history · Tamil/English)
+
+- **User roles** — operator / maintenance engineer / plant manager, selected in
+  the top bar and enforced by every Stage 4 API route (`stage4.require_role`).
+  Operators raise & acknowledge; engineers repair, verify, resolve, diagnose;
+  managers additionally calibrate, stress-test, download reports and restore.
+  No real authentication — it is a local prototype demonstrating the split.
+- **Backup & restore** — `GET /api/stage4/backup` zips calibration, tickets and
+  reports; `POST /api/stage4/restore` accepts only whitelisted JSON files and
+  validates every one before writing anything.
+- **Model version history** — `GET /api/stage4/modelhistory` reads the trained
+  timestamps, scikit-learn versions and recorded evaluations of both local
+  models. Read-only; retrain any time with the training scripts.
+- **Tamil/English toggle** — top-bar button switches the dashboard chrome
+  (headings, buttons, metric labels, scenario names) via a string dictionary;
+  default English, missing keys fall back to English, choice persists locally.
+- Tests: `tests/test_stage45.py` (15 checks) — role matrix, backup round-trip,
+  malicious-zip rejection, model history, endpoint enforcement.
+  Full suite: **79 tests, all passing**.

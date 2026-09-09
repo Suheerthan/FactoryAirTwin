@@ -9,179 +9,211 @@
   <script defer src="{{ url_for('static', filename='app.js') }}"></script>
 </head>
 <body>
-  <header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">F/A</span><div><strong>FactoryAir Twin</strong><span>TEAM VOLTS AND BOLTS</span></div></div><span class="mode">SIMULATED DATA · STAGE 3</span></header>
+  <header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">F/A</span><div><strong>FactoryAir Twin</strong><span data-i18n="team">TEAM VOLTS AND BOLTS</span></div></div><span class="mode" data-i18n="mode">SIMULATED DATA · STAGE 4.5</span>
+    <span style="display:flex;gap:10px;align-items:center;margin-left:auto">
+      <label style="display:flex;gap:6px;align-items:center;font-size:13px"><span data-i18n="role">Role</span>
+        <select id="role-select" style="padding:4px 6px;border-radius:6px;border:1px solid #9db6ad;background:#0e332d;color:#eaf6f0">
+          <option value="operator" data-i18n style="color:#142c31;background:#fff">Operator</option>
+          <option value="maintenance_engineer" selected data-i18n style="color:#142c31;background:#fff">Maintenance engineer</option>
+          <option value="manager" data-i18n style="color:#142c31;background:#fff">Plant manager</option>
+        </select></label>
+      <label style="display:flex;gap:6px;align-items:center;font-size:13px"><span data-i18n="name">Name</span>
+        <input id="operator-name" type="text" value="suhee" maxlength="30" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #9db6ad"></label>
+      <button id="lang-toggle" type="button" style="padding:5px 12px;border-radius:6px;border:1px solid #008561;background:#e4f3eb;color:#008561;font-weight:600;cursor:pointer">தமிழ்</button>
+    </span></header>
   <main>
-    <div class="page-title"><div><p class="eyebrow">COMPRESSOR ROOM / 01</p><h1>Energy & operation monitor</h1><p>Replay a 30-minute shift, detect hidden air losses and rank the cheapest fixes.</p></div><a href="#model">Model assumptions</a></div>
+    <div class="page-title"><div><p class="eyebrow" data-i18n>COMPRESSOR ROOM / 01</p><h1 data-i18n="h1">Energy & operation monitor</h1><p data-i18n="intro">Replay a 30-minute shift, detect hidden air losses and rank the cheapest fixes.</p></div><a href="#model" data-i18n>Model assumptions</a></div>
     <form id="controls" class="toolbar">
-      <label>Operating scenario<select id="scenario"><option value="normal">Normal operation</option><option value="leak">Suspected air leak</option><option value="unloaded">Extended unloaded running</option><option value="filter">Progressive filter blockage</option><option value="worn">Worn compressor</option></select></label>
-      <label>Assumed price · ₹/kWh<input id="tariff" type="number" min="0" max="100" step="0.1" value="7" required></label>
-      <button type="submit" class="primary" id="run">Load scenario</button>
-      <button type="button" id="export" disabled>Export full run</button>
-      <span class="rule-label">Rules + Stage 2 IF + Stage 3 classifier<br><small id="model-status">Checking local models…</small> · <a href="#validation">Evaluation</a></span>
+      <label><span data-i18n>Operating scenario</span><select id="scenario"><option value="normal" data-i18n-opt="normal">Normal operation</option><option value="leak" data-i18n-opt="leak">Suspected air leak</option><option value="unloaded" data-i18n-opt="unloaded">Extended unloaded running</option><option value="filter" data-i18n-opt="filter">Progressive filter blockage</option><option value="worn" data-i18n-opt="worn">Worn compressor</option></select></label>
+      <label><span data-i18n>Assumed price · ₹/kWh</span><input id="tariff" type="number" min="0" max="100" step="0.1" value="7" required></label>
+      <button type="submit" class="primary" id="run" data-i18n="btn.load">Load scenario</button>
+      <button type="button" id="export" disabled data-i18n="btn.export">Export full run</button>
+      <span class="rule-label"><span data-i18n>Rules + Stage 2 IF + Stage 3 classifier</span><br><small id="model-status">Checking local models…</small> · <a href="#validation" data-i18n>Evaluation</a></span>
     </form>
     <p id="error" class="error" role="alert" hidden></p>
     <section class="metrics" aria-label="Current simulated readings">
-      <article><span>Header pressure</span><div><strong id="pressure">—</strong><small>bar(g)</small></div><p>Demo band: 6.0–7.4 bar(g)</p></article>
-      <article><span>Electrical power</span><div><strong id="power">—</strong><small>kW</small></div><p id="state">Waiting for simulation</p></article>
-      <article><span>Electricity used</span><div><strong id="energy">—</strong><small>kWh</small></div><p id="cost">Illustrative electricity cost</p></article>
-      <article><span>Simulated accepted units</span><div><strong id="units">—</strong><small>units</small></div><p id="sec">Pressure-based production proxy</p></article>
+      <article><span data-i18n="m.pressure">Header pressure</span><div><strong id="pressure">—</strong><small>bar(g)</small></div><p data-i18n>Demo band: 6.0–7.4 bar(g)</p></article>
+      <article><span data-i18n="m.power">Electrical power</span><div><strong id="power">—</strong><small>kW</small></div><p id="state" data-i18n>Waiting for simulation</p></article>
+      <article><span data-i18n="m.energy">Electricity used</span><div><strong id="energy">—</strong><small>kWh</small></div><p id="cost" data-i18n>Illustrative electricity cost</p></article>
+      <article><span data-i18n="m.units">Simulated accepted units</span><div><strong id="units">—</strong><small data-i18n>units</small></div><p id="sec" data-i18n>Pressure-based production proxy</p></article>
     </section>
     <div class="workspace">
       <section class="panel monitoring" aria-label="Pressure and power history">
-        <div class="panel-heading"><div><p class="eyebrow">OPERATING HISTORY</p><h2 id="scenario-title">Normal operation</h2></div><span class="clock" id="clock">00:00 / 30:00</span></div>
-        <div class="chart-heading"><strong>Header pressure</strong><span>bar(g) · shaded operating band</span></div>
+        <div class="panel-heading"><div><p class="eyebrow" data-i18n>OPERATING HISTORY</p><h2 id="scenario-title">Normal operation</h2></div><span class="clock" id="clock">00:00 / 30:00</span></div>
+        <div class="chart-heading"><strong data-i18n>Header pressure</strong><span data-i18n>bar(g) · shaded operating band</span></div>
         <svg id="pressure-chart" class="chart" viewBox="0 0 780 180" role="img" aria-label="Simulated pressure history"></svg>
-        <div class="chart-heading"><strong>Compressor power</strong><span>kW</span></div>
+        <div class="chart-heading"><strong data-i18n>Compressor power</strong><span>kW</span></div>
         <svg id="power-chart" class="chart" viewBox="0 0 780 180" role="img" aria-label="Simulated electrical power history"></svg>
-        <div class="playback"><button id="play" type="button" disabled>Play</button><label class="scrub">Replay position<input id="scrubber" type="range" min="0" max="1799" value="0" aria-label="Simulation replay position" disabled></label><label>Speed<select id="speed"><option value="30">30×</option><option value="60" selected>60×</option><option value="120">120×</option></select></label></div>
-        <p class="chart-note" id="production">Production follows a fixed schedule in every comparison.</p>
+        <div class="playback"><button id="play" type="button" disabled data-i18n="btn.play">Play</button><label class="scrub"><span data-i18n>Replay position</span><input id="scrubber" type="range" min="0" max="1799" value="0" aria-label="Simulation replay position" disabled></label><label><span data-i18n>Speed</span><select id="speed"><option value="30">30×</option><option value="60" selected>60×</option><option value="120">120×</option></select></label></div>
+        <p class="chart-note" id="production" data-i18n>Production follows a fixed schedule in every comparison.</p>
       </section>
       <aside class="panel investigation">
-        <div class="panel-heading"><div><p class="eyebrow">INVESTIGATION</p><h2>Alerts & next action</h2></div><span id="alert-count" class="count">0</span></div>
-        <div id="alerts" aria-live="polite"><p class="empty">Load and replay a scenario to inspect operating signals.</p></div>
+        <div class="panel-heading"><div><p class="eyebrow" data-i18n>INVESTIGATION</p><h2 data-i18n="h.alerts">Alerts & next action</h2></div><span id="alert-count" class="count">0</span></div>
+        <div id="alerts" aria-live="polite"><p class="empty" data-i18n>Load and replay a scenario to inspect operating signals.</p></div>
         <div id="ai-panel" class="ai-panel">
-          <p class="eyebrow">EXPERIMENTAL ANOMALY DETECTOR · STAGE 2</p>
-          <h3 id="ai-title">Waiting for model status</h3>
-          <p id="ai-detail">Scores a trailing 60-second window every 30 seconds.</p>
+          <p class="eyebrow" data-i18n>EXPERIMENTAL ANOMALY DETECTOR · STAGE 2</p>
+          <h3 id="ai-title" data-i18n>Waiting for model status</h3>
+          <p id="ai-detail" data-i18n>Scores a trailing 60-second window every 30 seconds.</p>
           <p id="ai-score" class="ai-score"></p>
           <ul id="ai-observations" hidden></ul>
-          <p class="muted">An unusual pattern needs investigation. The score is not a fault probability or a confirmed cause. Range observations are not model explanations.</p>
+          <p class="muted" data-i18n>An unusual pattern needs investigation. The score is not a fault probability or a confirmed cause. Range observations are not model explanations.</p>
         </div>
         <div id="stage3-panel" class="ai-panel">
-          <p class="eyebrow">FAULT-TYPE CLASSIFIER · STAGE 3</p>
-          <h3 id="stage3-title">Waiting for model status</h3>
-          <p id="stage3-detail">Names the probable fault from the same sensor-light signals.</p>
+          <p class="eyebrow" data-i18n>FAULT-TYPE CLASSIFIER · STAGE 3</p>
+          <h3 id="stage3-title" data-i18n>Waiting for model status</h3>
+          <p id="stage3-detail" data-i18n>Names the probable fault from the same sensor-light signals.</p>
           <p id="stage3-cause" class="stage3-cause" hidden></p>
           <div id="stage3-probs" class="stage3-probs" hidden></div>
-          <p class="muted">Trained on labelled simulated runs. Probabilities are model outputs, not field failure odds. Operator approval is required before any real action.</p>
+          <p class="muted" data-i18n>Trained on labelled simulated runs. Probabilities are model outputs, not field failure odds. Operator approval is required before any real action.</p>
         </div>
-        <div class="action-box"><h3>Test an intervention</h3><p id="action-description">Choose a fault scenario and replay until an alert appears.</p><button id="compare" class="primary" type="button" disabled>Approve & simulate action</button><p class="muted">Runs a matched simulation. No physical equipment is connected.</p></div>
+        <div class="action-box"><h3 data-i18n="h.intervention">Test an intervention</h3><p id="action-description" data-i18n>Choose a fault scenario and replay until an alert appears.</p><button id="compare" class="primary" type="button" disabled data-i18n="btn.approve">Approve & simulate action</button><p class="muted" data-i18n>Runs a matched simulation. No physical equipment is connected.</p></div>
       </aside>
     </div>
     <section id="comparison" class="panel comparison" hidden>
-      <div class="panel-heading"><div><p class="eyebrow">BEFORE / AFTER</p><h2>Calculated simulation results</h2></div><span id="comparison-status" class="mode"></span></div>
-      <p id="comparison-action"></p><div class="comparison-results"><div class="savings"><span>Electricity reduction</span><strong id="saving-percent">—</strong><p id="saving-detail"></p><small>Calculated for this 30-minute run.<br>The submitted 10% target is not enforced.</small></div><div class="table-wrap"><table><caption class="sr-only">Matched baseline and intervention results</caption><thead><tr><th>Metric</th><th>Baseline</th><th>After action</th></tr></thead><tbody id="comparison-rows"></tbody></table></div></div>
+      <div class="panel-heading"><div><p class="eyebrow" data-i18n>BEFORE / AFTER</p><h2 data-i18n="h.compare">Calculated simulation results</h2></div><span id="comparison-status" class="mode"></span></div>
+      <p id="comparison-action"></p><div class="comparison-results"><div class="savings"><span data-i18n>Electricity reduction</span><strong id="saving-percent">—</strong><p id="saving-detail"></p><small>Calculated for this 30-minute run.<br>The submitted 10% target is not enforced.</small></div><div class="table-wrap"><table><caption class="sr-only">Matched baseline and intervention results</caption><thead><tr><th data-i18n>Metric</th><th data-i18n>Baseline</th><th data-i18n>After action</th></tr></thead><tbody id="comparison-rows"></tbody></table></div></div>
       <p class="note" id="comparison-limitation"></p>
     </section>
     <section id="optimiser" class="panel optimiser">
-      <div class="panel-heading"><div><p class="eyebrow">OPTIMISER / SAVINGS ROADMAP</p><h2>What should be done first?</h2></div><span class="mode">PRODUCTION-AWARE · SIMULATED</span></div>
+      <div class="panel-heading"><div><p class="eyebrow" data-i18n>OPTIMISER / SAVINGS ROADMAP</p><h2 data-i18n="h.optimiser">What should be done first?</h2></div><span class="mode" data-i18n>PRODUCTION-AWARE · SIMULATED</span></div>
       <div class="impact-strip" id="impact-strip">
-        <article><span>Run electricity</span><strong id="impact-kwh">—</strong><small>kWh / 30 min</small></article>
-        <article><span>Projected cost</span><strong id="impact-inr">—</strong><small>₹ / month, 24×7 extrapolation</small></article>
-        <article><span>Projected emissions</span><strong id="impact-co2">—</strong><small>kg CO₂e / month</small></article>
-        <label class="impact-grid">Grid factor kg CO₂e/kWh<input id="grid-factor" type="number" min="0" max="2" step="0.01" value="0.79"></label>
+        <article><span data-i18n>Run electricity</span><strong id="impact-kwh">—</strong><small>kWh / 30 min</small></article>
+        <article><span data-i18n>Projected cost</span><strong id="impact-inr">—</strong><small data-i18n>₹ / month, 24×7 extrapolation</small></article>
+        <article><span data-i18n>Projected emissions</span><strong id="impact-co2">—</strong><small>kg CO₂e / month</small></article>
+        <label class="impact-grid"><span data-i18n>Grid factor kg CO₂e/kWh</span><input id="grid-factor" type="number" min="0" max="2" step="0.01" value="0.79"></label>
       </div>
       <div class="optimiser-grid">
         <div class="opt-card">
-          <h3>1 · Pressure setpoint</h3>
-          <p>Searches lower cut-in / cut-out bands with full matched re-runs and accepts only options that keep output, pressure compliance ≥ 99% and the minimum-pressure guardrail.</p>
-          <button id="setpoint-run" type="button">Find safest lower setpoint</button>
+          <h3 data-i18n>1 · Pressure setpoint</h3>
+          <p data-i18n>Searches lower cut-in / cut-out bands with full matched re-runs and accepts only options that keep output, pressure compliance ≥ 99% and the minimum-pressure guardrail.</p>
+          <button id="setpoint-run" type="button" data-i18n>Find safest lower setpoint</button>
           <div id="setpoint-result" class="opt-result"></div>
         </div>
         <div class="opt-card">
-          <h3>2 · Multi-compressor sequencing</h3>
-          <p>Simulates a two-compressor room on the same demand schedule and shows which machine should carry base load. The unit with lower specific power should lead.</p>
-          <button id="sequence-run" type="button">Compare sequences</button>
+          <h3 data-i18n>2 · Multi-compressor sequencing</h3>
+          <p data-i18n>Simulates a two-compressor room on the same demand schedule and shows which machine should carry base load. The unit with lower specific power should lead.</p>
+          <button id="sequence-run" type="button" data-i18n>Compare sequences</button>
           <div id="sequence-result" class="opt-result"></div>
         </div>
         <div class="opt-card">
-          <h3>3 · Tariff-aware scheduling</h3>
-          <p>Moves a configurable share of daily compressed-air energy out of peak tariff hours into off-peak or solar-rich periods. Illustrative arithmetic, not a physics run.</p>
+          <h3 data-i18n>3 · Tariff-aware scheduling</h3>
+          <p data-i18n>Moves a configurable share of daily compressed-air energy out of peak tariff hours into off-peak or solar-rich periods. Illustrative arithmetic, not a physics run.</p>
           <div class="sched-inputs">
-            <label>Units/day<input id="sched-units" type="number" min="1" max="100000" value="300"></label>
-            <label>Shiftable %<input id="sched-shift" type="number" min="0" max="100" value="30"></label>
-            <label>Peak ₹<input id="sched-peak" type="number" min="0" max="100" step="0.1" value="9"></label>
-            <label>Off-peak ₹<input id="sched-off" type="number" min="0" max="100" step="0.1" value="5.5"></label>
-            <label>Solar ₹<input id="sched-solar" type="number" min="0" max="100" step="0.1" value="6"></label>
-            <label>Solar share %<input id="sched-solarshare" type="number" min="0" max="100" value="50"></label>
+            <label><span data-i18n>Units/day</span><input id="sched-units" type="number" min="1" max="100000" value="300"></label>
+            <label><span data-i18n>Shiftable %</span><input id="sched-shift" type="number" min="0" max="100" value="30"></label>
+            <label><span data-i18n>Peak ₹</span><input id="sched-peak" type="number" min="0" max="100" step="0.1" value="9"></label>
+            <label><span data-i18n>Off-peak ₹</span><input id="sched-off" type="number" min="0" max="100" step="0.1" value="5.5"></label>
+            <label><span data-i18n>Solar ₹</span><input id="sched-solar" type="number" min="0" max="100" step="0.1" value="6"></label>
+            <label><span data-i18n>Solar share %</span><input id="sched-solarshare" type="number" min="0" max="100" value="50"></label>
           </div>
-          <button id="schedule-run" type="button">Estimate schedule savings</button>
+          <button id="schedule-run" type="button" data-i18n>Estimate schedule savings</button>
           <div id="schedule-result" class="opt-result"></div>
         </div>
       </div>
-      <h3 class="catalog-heading">Ranked intervention catalogue</h3>
-      <p class="muted" id="catalog-note">Monthly figures extrapolate the 30-minute pattern continuously; costs are editable illustrative defaults.</p>
-      <div class="table-wrap"><table><caption class="sr-only">Ranked interventions with payback</caption><thead><tr><th>#</th><th>Action</th><th>What to do</th><th>kWh / month</th><th>₹ / month</th><th>kg CO₂e / month</th><th>Assumed cost</th><th>Payback</th></tr></thead><tbody id="catalog-rows"><tr><td colspan="8">Loading catalogue…</td></tr></tbody></table></div>
+      <h3 class="catalog-heading" data-i18n>Ranked intervention catalogue</h3>
+      <p class="muted" id="catalog-note" data-i18n>Monthly figures extrapolate the 30-minute pattern continuously; costs are editable illustrative defaults.</p>
+      <div class="table-wrap"><table><caption class="sr-only">Ranked interventions with payback</caption><thead><tr><th data-i18n>#</th><th data-i18n>Action</th><th data-i18n>What to do</th><th data-i18n>kWh / month</th><th data-i18n>₹ / month</th><th data-i18n>kg CO₂e / month</th><th data-i18n>Assumed cost</th><th data-i18n>Payback</th></tr></thead><tbody id="catalog-rows"><tr><td colspan="8">Loading catalogue…</td></tr></tbody></table></div>
     </section>
     <section id="stage4" class="panel optimiser">
-      <div class="panel-heading"><div><p class="eyebrow">STAGE 4 / PRODUCTION READINESS</p><h2>From prototype to plant-ready workflow</h2></div><span class="mode">SIMULATED · OPERATOR-LED</span></div>
+      <div class="panel-heading"><div><p class="eyebrow" data-i18n>STAGE 4 / PRODUCTION READINESS</p><h2 data-i18n="h.stage4">From prototype to plant-ready workflow</h2></div><span class="mode" data-i18n>SIMULATED · OPERATOR-LED</span></div>
       <div class="optimiser-grid">
         <div class="opt-card">
-          <h3>1 · Plant setup & calibration</h3>
-          <p>Site calibration values used by Stage 4 checks and reports. Simulation physics stays on the illustrative demo constants.</p>
+          <h3 data-i18n>1 · Plant setup & calibration</h3>
+          <p data-i18n>Site calibration values used by Stage 4 checks and reports. Simulation physics stays on the illustrative demo constants.</p>
           <div class="sched-inputs">
-            <label>Site name<input id="cfg-site" type="text" maxlength="80"></label>
-            <label>Rated kW<input id="cfg-kw" type="number" min="0.5" max="500" step="0.1"></label>
-            <label>Receiver m³<input id="cfg-vol" type="number" min="0.05" max="50" step="0.05"></label>
-            <label>Min pressure bar<input id="cfg-min" type="number" min="4" max="7.5" step="0.1"></label>
-            <label>Cut-in bar<input id="cfg-in" type="number" min="5.5" max="7.5" step="0.1"></label>
-            <label>Cut-out bar<input id="cfg-out" type="number" min="5.5" max="7.5" step="0.1"></label>
-            <label>Max pressure bar<input id="cfg-max" type="number" min="5" max="12" step="0.1"></label>
-            <label>Tariff ₹/kWh<input id="cfg-tariff" type="number" min="0" max="100" step="0.1"></label>
+            <label><span data-i18n>Site name</span><input id="cfg-site" type="text" maxlength="80"></label>
+            <label><span data-i18n>Rated kW</span><input id="cfg-kw" type="number" min="0.5" max="500" step="0.1"></label>
+            <label><span data-i18n>Receiver m³</span><input id="cfg-vol" type="number" min="0.05" max="50" step="0.05"></label>
+            <label><span data-i18n>Min pressure bar</span><input id="cfg-min" type="number" min="4" max="7.5" step="0.1"></label>
+            <label><span data-i18n>Cut-in bar</span><input id="cfg-in" type="number" min="5.5" max="7.5" step="0.1"></label>
+            <label><span data-i18n>Cut-out bar</span><input id="cfg-out" type="number" min="5.5" max="7.5" step="0.1"></label>
+            <label><span data-i18n>Max pressure bar</span><input id="cfg-max" type="number" min="5" max="12" step="0.1"></label>
+            <label><span data-i18n>Tariff ₹/kWh</span><input id="cfg-tariff" type="number" min="0" max="100" step="0.1"></label>
           </div>
-          <button id="cfg-save" type="button">Save calibration</button>
+          <button id="cfg-save" type="button" data-i18n>Save calibration</button>
           <div id="cfg-result" class="opt-result"></div>
         </div>
         <div class="opt-card">
-          <h3>2 · Sensor health monitoring</h3>
-          <p>Checks the raw signal stream for missing, stale, stuck or impossible readings before any AI scoring. Optionally inject synthetic faults to test it.</p>
-          <label>Scenario<select id="health-scenario"><option value="normal">Normal</option><option value="leak">Leak</option><option value="unloaded">Unloaded</option><option value="filter">Filter</option><option value="worn">Worn</option></select></label>
+          <h3 data-i18n>2 · Sensor health monitoring</h3>
+          <p data-i18n>Checks the raw signal stream for missing, stale, stuck or impossible readings before any AI scoring. Optionally inject synthetic faults to test it.</p>
+          <label><span data-i18n>Scenario</span><select id="health-scenario"><option value="normal" data-i18n>Normal</option><option value="leak" data-i18n>Leak</option><option value="unloaded" data-i18n>Unloaded</option><option value="filter" data-i18n>Filter</option><option value="worn" data-i18n>Worn</option></select></label>
           <div class="sched-inputs">
-            <label><input id="cor-dropout" type="checkbox"> Dropout</label>
-            <label><input id="cor-stuck" type="checkbox"> Stuck pressure</label>
-            <label><input id="cor-noise" type="checkbox"> Power noise</label>
-            <label><input id="cor-range" type="checkbox"> Range violation</label>
+            <label><input id="cor-dropout" type="checkbox"> <span data-i18n>Dropout</span></label>
+            <label><input id="cor-stuck" type="checkbox"> <span data-i18n>Stuck pressure</span></label>
+            <label><input id="cor-noise" type="checkbox"> <span data-i18n>Power noise</span></label>
+            <label><input id="cor-range" type="checkbox"> <span data-i18n>Range violation</span></label>
           </div>
-          <button id="health-run" type="button">Run health check</button>
+          <button id="health-run" type="button" data-i18n>Run health check</button>
           <div id="health-result" class="opt-result"></div>
         </div>
         <div class="opt-card">
-          <h3>3 · Fault diagnosis (unknown & multiple faults)</h3>
-          <p>Combines rules + Stage 2 + Stage 3 into one decision: a known fault, overlapping faults, or an unknown anomaly worth manual investigation.</p>
-          <label>Scenario<select id="diag-scenario"><option value="leak">Leak</option><option value="unloaded">Unloaded</option><option value="filter">Filter</option><option value="worn">Worn</option><option value="normal">Normal</option></select></label>
-          <button id="diag-run" type="button">Diagnose scenario</button>
-          <button id="diag-ticket" type="button">Create ticket from diagnosis</button>
+          <h3 data-i18n>3 · Fault diagnosis (unknown & multiple faults)</h3>
+          <p data-i18n>Combines rules + Stage 2 + Stage 3 into one decision: a known fault, overlapping faults, or an unknown anomaly worth manual investigation.</p>
+          <label><span data-i18n>Scenario</span><select id="diag-scenario"><option value="leak" data-i18n>Leak</option><option value="unloaded" data-i18n>Unloaded</option><option value="filter" data-i18n>Filter</option><option value="worn" data-i18n>Worn</option><option value="normal" data-i18n>Normal</option></select></label>
+          <button id="diag-run" type="button" data-i18n>Diagnose scenario</button>
+          <button id="diag-ticket" type="button" data-i18n>Create ticket from diagnosis</button>
           <div id="diag-result" class="opt-result"></div>
         </div>
         <div class="opt-card">
-          <h3>6 · Combined-action savings</h3>
-          <p>Repair + setpoint are measured in ONE combined re-simulation so overlapping savings are never counted twice. Sequencing and scheduling are added separately.</p>
-          <label>Scenario<select id="comb-scenario"><option value="leak">Leak</option><option value="unloaded">Unloaded</option><option value="normal">Normal</option><option value="filter">Filter</option><option value="worn">Worn</option></select></label>
+          <h3 data-i18n>6 · Combined-action savings</h3>
+          <p data-i18n>Repair + setpoint are measured in ONE combined re-simulation so overlapping savings are never counted twice. Sequencing and scheduling are added separately.</p>
+          <label><span data-i18n>Scenario</span><select id="comb-scenario"><option value="leak" data-i18n>Leak</option><option value="unloaded" data-i18n>Unloaded</option><option value="normal" data-i18n>Normal</option><option value="filter" data-i18n>Filter</option><option value="worn" data-i18n>Worn</option></select></label>
           <div class="sched-inputs">
-            <label><input id="act-repair" type="checkbox" checked> Repair leak</label>
-            <label><input id="act-setpoint" type="checkbox" checked> Setpoint</label>
-            <label><input id="act-sequence" type="checkbox"> Sequencing</label>
-            <label><input id="act-schedule" type="checkbox"> Scheduling</label>
+            <label><input id="act-repair" type="checkbox" checked> <span data-i18n>Repair leak</span></label>
+            <label><input id="act-setpoint" type="checkbox" checked> <span data-i18n>Setpoint</span></label>
+            <label><input id="act-sequence" type="checkbox"> <span data-i18n>Sequencing</span></label>
+            <label><input id="act-schedule" type="checkbox"> <span data-i18n>Scheduling</span></label>
           </div>
-          <button id="comb-run" type="button">Calculate combined savings</button>
+          <button id="comb-run" type="button" data-i18n>Calculate combined savings</button>
           <div id="comb-result" class="opt-result"></div>
         </div>
         <div class="opt-card">
-          <h3>7 · Downloadable PDF report</h3>
-          <p>Full prototype summary: calibration, sensor health, diagnosis, energy comparison, combined savings, maintenance history, stress tests, assumptions.</p>
-          <a class="primary" id="pdf-link" href="/api/report/pdf" style="display:inline-block;padding:8px 14px;text-decoration:none">Download PDF report</a>
-          <div id="pdf-note" class="opt-result"><p class="muted">Generated on demand · labelled SIMULATED on every page.</p></div>
+          <h3 data-i18n>7 · Downloadable PDF report</h3>
+          <p data-i18n>Full prototype summary: calibration, sensor health, diagnosis, energy comparison, combined savings, maintenance history, stress tests, assumptions.</p>
+          <a class="primary" id="pdf-link" href="/api/report/pdf" style="display:inline-block;padding:8px 14px;text-decoration:none" data-i18n>Download PDF report</a>
+          <div id="pdf-note" class="opt-result"><p class="muted" data-i18n>Generated on demand · labelled SIMULATED on every page.</p></div>
         </div>
         <div class="opt-card">
-          <h3>8 · Stress-test mode</h3>
-          <p>Battery of hostile conditions: sensor dropouts, stuck transmitter, heavy noise, a 25% demand jump, and leak + filter at the same time.</p>
-          <button id="stress-run" type="button">Run full stress battery</button>
+          <h3 data-i18n>8 · Stress-test mode</h3>
+          <p data-i18n>Battery of hostile conditions: sensor dropouts, stuck transmitter, heavy noise, a 25% demand jump, and leak + filter at the same time.</p>
+          <button id="stress-run" type="button" data-i18n>Run full stress battery</button>
           <div id="stress-result" class="opt-result"></div>
         </div>
       </div>
-      <h3 class="catalog-heading">4 & 5 · Maintenance workflow & post-repair verification</h3>
-      <p class="muted">Tickets persist in <code>data/maintenance.json</code>. Lifecycle: open → acknowledged → in_repair → verifying → resolved, with a full operator log. Verification compares matched before/after simulated runs.</p>
-      <div class="table-wrap"><table><caption class="sr-only">Maintenance tickets</caption><thead><tr><th>ID</th><th>Fault</th><th>Title</th><th>State</th><th>Verification</th><th>Actions</th></tr></thead><tbody id="ticket-rows"><tr><td colspan="6">Loading tickets…</td></tr></tbody></table></div>
+      <div class="optimiser-grid" style="margin-top:14px">
+        <div class="opt-card">
+          <h3 data-i18n>👥 User roles & access</h3>
+          <p>Role chosen in the top bar: <strong id="role-current">Maintenance engineer</strong>. Operators raise & acknowledge tickets; engineers repair, verify & resolve; managers also change calibration, run stress tests and restore backups. Enforced by the API.</p>
+          <div id="role-matrix" class="opt-result"></div>
+        </div>
+        <div class="opt-card">
+          <h3 data-i18n>💾 Backup & restore</h3>
+          <p data-i18n>Download calibration, tickets and reports as one ZIP; restore it on any machine. Restore accepts only whitelisted JSON files and validates them first.</p>
+          <button id="backup-run" type="button" data-i18n>Download backup ZIP</button>
+          <label style="display:block;margin-top:8px"><span data-i18n>Restore ZIP</span> <input id="restore-file" type="file" accept=".zip"></label>
+          <button id="restore-run" type="button" data-i18n>Restore from file (manager)</button>
+          <div id="backup-result" class="opt-result"></div>
+        </div>
+        <div class="opt-card">
+          <h3 data-i18n>🕓 Model version history</h3>
+          <p data-i18n>When each local model was trained, with which scikit-learn, and its recorded evaluation. Retrain any time with train_model.py / train_stage3.py.</p>
+          <button id="history-run" type="button" data-i18n>Load model history</button>
+          <div id="history-result" class="opt-result"></div>
+        </div>
+      </div>
+      <h3 class="catalog-heading" data-i18n>4 & 5 · Maintenance workflow & post-repair verification</h3>
+      <p class="muted"><span data-i18n>Tickets persist in</span> <code>data/maintenance.json</code><span data-i18n>. Lifecycle: open → acknowledged → in_repair → verifying → resolved, with a full operator log. Verification compares matched before/after simulated runs.</span></p>
+      <div class="table-wrap"><table><caption class="sr-only">Maintenance tickets</caption><thead><tr><th data-i18n>ID</th><th data-i18n>Fault</th><th data-i18n>Title</th><th data-i18n>State</th><th data-i18n>Verification</th><th data-i18n>Actions</th></tr></thead><tbody id="ticket-rows"><tr><td colspan="6">Loading tickets…</td></tr></tbody></table></div>
     </section>
     <section id="validation" class="panel validation">
-      <div class="panel-heading"><div><p class="eyebrow">MODEL EVALUATION / SIMULATED DATA</p><h2>How well did the detectors perform?</h2></div><button id="download-report" type="button" disabled>Download Stage 2 report</button></div>
-      <p id="validation-message">Train the local model to see results from separate test runs.</p>
+      <div class="panel-heading"><div><p class="eyebrow" data-i18n>MODEL EVALUATION / SIMULATED DATA</p><h2 data-i18n="h.validation">How well did the detectors perform?</h2></div><button id="download-report" type="button" disabled data-i18n>Download Stage 2 report</button></div>
+      <p id="validation-message" data-i18n>Train the local model to see results from separate test runs.</p>
       <div id="validation-results" hidden>
         <div class="metrics evaluation-metrics">
-          <article><span>Precision</span><div><strong id="ai-precision">—</strong></div><p>Correct fault flags / all flags</p></article>
-          <article><span>Recall</span><div><strong id="ai-recall">—</strong></div><p>Flagged fault windows / all fault windows</p></article>
-          <article><span>F1 score</span><div><strong id="ai-f1">—</strong></div><p>Balance of precision and recall</p></article>
-          <article><span>False-positive rate</span><div><strong id="ai-fpr">—</strong></div><p>Flagged normal windows / all normal windows</p></article>
+          <article><span data-i18n>Precision</span><div><strong id="ai-precision">—</strong></div><p data-i18n>Correct fault flags / all flags</p></article>
+          <article><span data-i18n>Recall</span><div><strong id="ai-recall">—</strong></div><p data-i18n>Flagged fault windows / all fault windows</p></article>
+          <article><span data-i18n>F1 score</span><div><strong id="ai-f1">—</strong></div><p data-i18n>Balance of precision and recall</p></article>
+          <article><span data-i18n>False-positive rate</span><div><strong id="ai-fpr">—</strong></div><p data-i18n>Flagged normal windows / all normal windows</p></article>
         </div>
         <p id="ai-confusion"></p>
         <p id="ai-events"></p>
@@ -189,24 +221,24 @@
         <p class="note">All data comes from the same simplified simulator. Overlapping windows are correlated. Fault timing defines the test labels; some operating states make the fault difficult to observe. These results do not establish performance on factory data.</p>
       </div>
       <div class="stage3-validation">
-        <div class="panel-heading"><div><p class="eyebrow">STAGE 3 · SUPERVISED FAULT-TYPE CLASSIFIER</p><h2 id="stage3-val-title">Stage 3 evaluation</h2></div><button id="download-stage3" type="button" disabled>Download Stage 3 report</button></div>
-        <p id="stage3-message">Run train_stage3.py to create the Stage 3 model and report.</p>
+        <div class="panel-heading"><div><p class="eyebrow" data-i18n>STAGE 3 · SUPERVISED FAULT-TYPE CLASSIFIER</p><h2 id="stage3-val-title" data-i18n>Stage 3 evaluation</h2></div><button id="download-stage3" type="button" disabled data-i18n>Download Stage 3 report</button></div>
+        <p id="stage3-message" data-i18n>Run train_stage3.py to create the Stage 3 model and report.</p>
         <div id="stage3-results" hidden>
           <div class="metrics evaluation-metrics">
-            <article><span>Macro F1 (window)</span><div><strong id="s3-f1">—</strong></div><p id="s3-target">Target: ≥ 85%</p></article>
-            <article><span>Event detection</span><div><strong id="s3-events">—</strong></div><p>Hybrid classifier + rules</p></article>
-            <article><span>Median delay</span><div><strong id="s3-delay">—</strong></div><p>Among detected events</p></article>
-            <article><span>False-alarm episodes</span><div><strong id="s3-fa">—</strong></div><p>In entirely normal runs</p></article>
+            <article><span data-i18n>Macro F1 (window)</span><div><strong id="s3-f1">—</strong></div><p id="s3-target" data-i18n>Target: ≥ 85%</p></article>
+            <article><span data-i18n>Event detection</span><div><strong id="s3-events">—</strong></div><p data-i18n>Hybrid classifier + rules</p></article>
+            <article><span data-i18n>Median delay</span><div><strong id="s3-delay">—</strong></div><p data-i18n>Among detected events</p></article>
+            <article><span data-i18n>False-alarm episodes</span><div><strong id="s3-fa">—</strong></div><p data-i18n>In entirely normal runs</p></article>
           </div>
-          <div class="table-wrap"><table><caption class="sr-only">Per-class Stage 3 performance</caption><thead><tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead><tbody id="stage3-rows"></tbody></table></div>
+          <div class="table-wrap"><table><caption class="sr-only">Per-class Stage 3 performance</caption><thead><tr><th data-i18n>Class</th><th data-i18n>Precision</th><th data-i18n>Recall</th><th data-i18n>F1</th></tr></thead><tbody id="stage3-rows"></tbody></table></div>
           <p id="stage3-note" class="evaluation-caution"></p>
           <p class="note">Trained on labelled simulated faults (separate seed blocks; Stage 2 test seeds untouched). Window recall is bounded by faults that are not observable in every 60 s state; event detection counts a run once it is flagged at least once after onset.</p>
         </div>
       </div>
     </section>
-    <details id="connectivity" class="panel assumptions"><summary>Edge connectivity & integration (Modbus / MQTT)</summary><div class="connectivity-body"><p>FactoryAir Twin is edge-first: one power measurement at the compressor panel (PowerTag-class), one header pressure transmitter and controller state are enough. The edge device publishes readings and detection windows locally; only operator-approved recommendations are acted on.</p><button id="load-sample" type="button">Show sample MQTT payload & Modbus map</button><pre id="sample-payload" hidden></pre><p id="sample-note" class="muted"></p></div></details>
-    <details id="model" class="panel assumptions"><summary>Model assumptions & prototype limits</summary><div class="assumption-grid"><div><h3>Illustrative equipment</h3><p>One 7.5 kW compressor; 0.50 m³ receiver; nominal air delivery 0.90 m³/min at reference conditions. Pressure controller loads at 6.4 bar(g) and unloads at 7.2 bar(g).</p><p>Air flows use the same 1.01325 bar reference pressure and assumed constant temperature. The receiver balance updates once per simulated second.</p></div><div><h3>What the results mean</h3><p>A production cycle takes 15 seconds. It counts as accepted only when the demo minimum pressure is met throughout the cycle. This is a pressure-only proxy; real product quality is not modelled.</p><p>The replay keeps the original fixed, noise-free demonstration settings. Training and test simulations vary demand, equipment parameters and sensor noise. Startup transients, motor wear limits and minimum restart times remain unmodelled.</p></div><div><h3>Stage 3 additions</h3><p>Filter blockage is simulated as a progressive inlet restriction (flow ×0.75 after 5 minutes); wear as degraded flow (×0.88) and higher power (×1.06). Detection uses loaded pressure-climb rate and power-versus-map ratios.</p><p>The optimiser only recommends; every action is re-simulated with production guardrails before and after. Monthly money and CO₂e figures are extrapolations of one 30-minute pattern and labelled illustrative.</p></div></div></details>
-    <footer><span>FactoryAir Twin · Challenge 04: Smart Manufacturing</span><span>Local prototype · STAGE 3 · One compressor room</span></footer>
+    <details id="connectivity" class="panel assumptions"><summary data-i18n>Edge connectivity & integration (Modbus / MQTT)</summary><div class="connectivity-body"><p>FactoryAir Twin is edge-first: one power measurement at the compressor panel (PowerTag-class), one header pressure transmitter and controller state are enough. The edge device publishes readings and detection windows locally; only operator-approved recommendations are acted on.</p><button id="load-sample" type="button" data-i18n>Show sample MQTT payload & Modbus map</button><pre id="sample-payload" hidden></pre><p id="sample-note" class="muted"></p></div></details>
+    <details id="model" class="panel assumptions"><summary data-i18n>Model assumptions & prototype limits</summary><div class="assumption-grid"><div><h3 data-i18n>Illustrative equipment</h3><p>One 7.5 kW compressor; 0.50 m³ receiver; nominal air delivery 0.90 m³/min at reference conditions. Pressure controller loads at 6.4 bar(g) and unloads at 7.2 bar(g).</p><p>Air flows use the same 1.01325 bar reference pressure and assumed constant temperature. The receiver balance updates once per simulated second.</p></div><div><h3 data-i18n>What the results mean</h3><p>A production cycle takes 15 seconds. It counts as accepted only when the demo minimum pressure is met throughout the cycle. This is a pressure-only proxy; real product quality is not modelled.</p><p>The replay keeps the original fixed, noise-free demonstration settings. Training and test simulations vary demand, equipment parameters and sensor noise. Startup transients, motor wear limits and minimum restart times remain unmodelled.</p></div><div><h3 data-i18n>Stage 3 additions</h3><p>Filter blockage is simulated as a progressive inlet restriction (flow ×0.75 after 5 minutes); wear as degraded flow (×0.88) and higher power (×1.06). Detection uses loaded pressure-climb rate and power-versus-map ratios.</p><p>The optimiser only recommends; every action is re-simulated with production guardrails before and after. Monthly money and CO₂e figures are extrapolations of one 30-minute pattern and labelled illustrative.</p></div></div></details>
+    <footer><span data-i18n="footer.a">FactoryAir Twin · Challenge 04: Smart Manufacturing</span><span data-i18n="footer.b">Local prototype · STAGE 4.5 · One compressor room</span></footer>
   </main>
 </body>
 </html>
