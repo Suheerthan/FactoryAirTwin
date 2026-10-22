@@ -180,3 +180,20 @@ def test_selfcal_analysis_ranks_a_leaky_night_first():
 def test_selfcal_evidence_route(client):
     r = client.get("/api/evidence/selfcal")
     assert r.status_code in (200, 404)
+
+
+def test_duty_analysis_flags_continuous_and_stuck_nights():
+    from metropt_selfcal import duty_analysis
+    def night(duty, p_range=0.5):
+        n = 720
+        loaded = int(duty * n)
+        return {"t": list(range(n)), "p": [8.0 + p_range * (i % 7) / 7 for i in range(n)],
+                "a": [6.5] * loaded + [0.1] * (n - loaded)}
+    nights = {f"2020-05-{d:02d}": night(0.1) for d in range(1, 20)}
+    nights["2020-05-30"] = night(1.0)            # documented leak, continuous loading
+    nights["2020-05-25"] = night(1.0, p_range=0)  # frozen signal: excluded
+    d = duty_analysis(nights, threshold=4.8)
+    assert d["stuck_signal_nights_excluded"] == ["2020-05-25"]
+    assert d["documented_leak_nights"][0]["rank_high_to_low"] == 1
+    assert d["auc_documented_vs_normal"] == 1.0
+    assert d["continuous_nights"] == ["2020-05-30"]

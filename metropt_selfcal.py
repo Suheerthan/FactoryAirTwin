@@ -141,7 +141,51 @@ def analyse(nights, threshold=None):
     if leak_nights and normal:
         better = sum(1 for ln in leak_nights for nn in normal if ln["leak_fraction"] > nn["leak_fraction"])
         summary["auc_leak_nights_vs_normal"] = round(better / (len(leak_nights) * len(normal)), 3)
+    summary["duty"] = duty_analysis(nights, threshold)
     return results, summary
+
+
+def duty_analysis(nights, threshold, min_samples=360):
+    """Share of the depot night the compressor spends loaded.
+
+    A severe leak keeps the compressor loaded all night, so the load/unload
+    test above has no idle segment and reports nothing - yet that is itself
+    the strongest leak signal (the time-ratio estimator at its ceiling).
+    Nights whose pressure never moves (frozen or gap-filled signal) are the
+    sensor-health 'stuck' case and are excluded, as the live gateway would.
+    """
+    rows = []
+    for night in sorted(nights):
+        n = nights[night]
+        if len(n["a"]) < min_samples:
+            continue
+        duty = sum(1 for a in n["a"] if a > threshold) / len(n["a"])
+        stuck = max(n["p"]) - min(n["p"]) < 0.01
+        rows.append({"night": night, "duty": round(duty, 4), "documented_leak": in_documented_leak(night),
+                     "stuck_signal": stuck, "continuous": duty >= 0.98})
+    usable = [r for r in rows if not r["stuck_signal"]]
+    docs = [r for r in usable if r["documented_leak"]]
+    normal = [r for r in usable if not r["documented_leak"]]
+    for r in usable:
+        r["rank_high_to_low"] = 1 + sum(1 for x in usable if x["duty"] > r["duty"])
+    auc = None
+    if docs and normal:
+        wins = sum((d["duty"] > x["duty"]) + 0.5 * (d["duty"] == x["duty"]) for d in docs for x in normal)
+        auc = round(wins / (len(docs) * len(normal)), 3)
+    continuous = [r for r in usable if r["continuous"]]
+    return {
+        "nights": len(rows), "stuck_signal_nights_excluded": [r["night"] for r in rows if r["stuck_signal"]],
+        "median_duty_normal": round(median(r["duty"] for r in normal), 3) if normal else None,
+        "documented_leak_nights": [{"night": r["night"], "duty": r["duty"], "rank_high_to_low": r["rank_high_to_low"],
+                                    "of": len(usable)} for r in docs],
+        "auc_documented_vs_normal": auc,
+        "continuous_nights": [r["night"] for r in continuous],
+        "continuous_nights_documented": sum(r["documented_leak"] for r in continuous),
+        "reading": ("Duty = share of 01:00-05:00 spent loaded. Continuous loading (>= 98%) means leakage at or "
+                    "above compressor capacity, or other night-time air use. Documented-leak nights vs all others; "
+                    "ties count half."),
+        "per_night": rows,
+    }
 
 
 def main():

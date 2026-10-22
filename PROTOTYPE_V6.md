@@ -2,7 +2,7 @@
 
 Everything below runs on **simulated physics** on one laptop, offline, unless
 marked *real data*. No equipment is connected. Every number is reproduced by
-`pytest` (124 tests).
+`pytest` (125 tests).
 
 ## What is new in v7
 
@@ -13,6 +13,16 @@ marked *real data*. No equipment is connected. Every number is reproduced by
 | **Try it with your own data** | Upload any logger CSV (pressure + kW or motor current, optional timestamp/production). Idle windows picked from the production flag, the night, or the whole file; loaded/unloaded split learned per file (Otsu). Returns leak, ₹, storage, specific power, unloaded share, motor health. Sample file included. | `csv_import.py`, `/api/twin/upload`, `/api/twin/sample.csv` |
 | **One-page owner report** | Print-ready A4 summary in English or Tamil (browser renders Tamil correctly; Print → Save as PDF). | `owner_report.py`, `/report/owner?lang=ta` |
 | **Self-calibration on real data** | Runs the leak test on MetroPT-3 depot nights (real TP3 pressure + motor current, ~0.1 Hz) and checks whether documented-leak nights read higher. Leak reported as a fraction of capacity only (FAD unknown). | `metropt_selfcal.py`, Evidence screen |
+
+**Real data (MetroPT-3, UCI):** `metropt_selfcal.py` read 1.5 M real readings
+(163 depot nights, 01:00-05:00). Every documented-leak night ran the compressor
+loaded all night (100 % duty vs a 10 % median): all four rank in the top 7 of
+159 usable nights, AUC 0.988 (the synthetic anomaly model scored 0.58 on the
+same data). Caveats: 4 of the 7 continuous-loading nights are documented leaks;
+the other 3 may be unrecorded leaks or other night use; 4 frozen-signal nights
+were excluded by the sensor-health rule; on cycling nights the two leak
+estimators disagree by a median 15 %, looser than in simulation. Report:
+`reports/metropt3_selfcal.json`.
 
 Measured (simulated): live identification on the virtual node found leak
 0.185 m³/min (true ≈ 0.18) and storage 0.65 m³ (true 0.62); the sample CSV

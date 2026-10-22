@@ -250,19 +250,19 @@ if (location.hash === "#gateway") startGatewayPolling();
 async function loadSelfcalEvidence() {
   try {
     const r = await getJSON("/api/evidence/selfcal");
-    const s = r.summary;
-    const leakNights = s.documented_leak_nights || [];
-    const cards = [
-      card(t("Depot nights identified"), `${s.nights_identified}/${s.nights_with_data}`, tf("sc.rows", inr(r.rows_read)), "ok"),
-      card(t("Estimators agree"), s.median_disagreement_pct == null ? "—" : `±${fmt(s.median_disagreement_pct, 1)}%`, t("median time-ratio vs slope-ratio gap on real data"), "ok"),
-      card(t("Normal-night leak"), s.median_leak_fraction_normal_nights == null ? "—" : `${fmt(s.median_leak_fraction_normal_nights * 100, 1)}%`, t("of compressor capacity, median")),
-    ];
-    if (s.auc_leak_nights_vs_normal != null) cards.push(card(t("Documented-leak nights rank higher"), fmt(s.auc_leak_nights_vs_normal, 2),
-      t("probability vs a normal night (0.5 = chance)"), s.auc_leak_nights_vs_normal > 0.6 ? "ok" : "warn"));
-    $("sc-cards").replaceChildren(...cards);
-    $("sc-note").textContent = leakNights.map(n => tf("sc.night", n.night, fmt(n.leak_fraction * 100, 1), fmt(n.ratio_to_normal_median, 2), n.rank_high_to_low, n.of)).join(" · ")
-      + (leakNights.length ? " · " : "") + r.limits.join(" ");
-    drawSelfcal(r.nights.filter(n => n.ok));
+    const s = r.summary, d = s.duty;
+    if (!d) return;
+    const docs = d.documented_leak_nights || [];
+    const worst = Math.max(...docs.map(n => n.rank_high_to_low));
+    const usable = d.nights - d.stuck_signal_nights_excluded.length;
+    $("sc-cards").replaceChildren(
+      card(t("Documented-leak nights rank higher"), fmt(d.auc_documented_vs_normal, 3), t("probability a documented-leak night out-ranks a normal one (0.5 = chance; synthetic AI scored 0.58)"), "ok"),
+      card(t("Documented leaks near the top"), `${docs.length}/${docs.length}`, tf("sc.top", worst, usable), "ok"),
+      card(t("Normal-night duty"), `${fmt(d.median_duty_normal * 100, 0)}%`, t("of 01:00-05:00 spent loaded (median); documented-leak nights: 100%")),
+      card(t("Continuous nights that were documented"), `${d.continuous_nights_documented}/${d.continuous_nights.length}`, t("the rest may be unrecorded leaks or other night use: the data cannot say"), "warn"),
+      card(t("Estimators agree"), `±${fmt(s.median_disagreement_pct, 1)}%`, tf("sc.cyc", s.nights_identified), "warn"));
+    $("sc-note").textContent = tf("sc.note", d.continuous_nights.join(", "), d.stuck_signal_nights_excluded.join(", ")) + " " + r.limits.join(" ");
+    drawSelfcal(d.per_night.filter(n => !n.stuck_signal));
   } catch (error) { /* stays "Not run yet." */ }
 }
 
@@ -271,32 +271,41 @@ function drawSelfcal(nights) {
   if (!nights.length) return;
   svg.hidden = false; svg.replaceChildren();
   const W = 640, H = 220, L = 44, R = 10, T = 12, B = 28;
-  const maxY = Math.ceil(Math.max(...nights.map(n => n.leak_fraction)) * 20) / 20 || 0.05;
   const bw = (W - L - R) / nights.length;
-  const y = v => H - B - v / maxY * (H - T - B);
-  for (let i = 0; i <= 4; i++) {
-    const v = maxY * i / 4;
+  const y = v => H - B - v * (H - T - B);
+  [0, 0.25, 0.5, 0.75, 1].forEach(v => {
     svg.append(el("line", {x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: "#e2ddd1"}));
     svg.append(el("text", {x: L - 6, y: y(v) + 4, "text-anchor": "end"}, `${Math.round(v * 100)}%`));
-  }
+  });
   nights.forEach((n, i) => {
-    const r = el("rect", {x: L + i * bw, y: y(n.leak_fraction), width: Math.max(1, bw - 1), height: y(0) - y(n.leak_fraction),
-      fill: n.documented_leak ? "#f2a516" : "#7fc4ea"});
-    r.append(el("title", {}, `${n.night}: ${fmt(n.leak_fraction * 100, 1)}%${n.documented_leak ? " · " + t("documented leak") : ""}`));
+    const r = el("rect", {x: L + i * bw, y: y(n.duty), width: Math.max(1, bw - 0.6), height: y(0) - y(n.duty),
+      fill: n.documented_leak ? "#f2a516" : (n.continuous ? "#5d7b84" : "#7fc4ea")});
+    r.append(el("title", {}, `${n.night}: ${fmt(n.duty * 100, 1)}% loaded${n.documented_leak ? " · " + t("documented leak") : ""}`));
     svg.append(r);
     if (i % Math.ceil(nights.length / 8) === 0) svg.append(el("text", {x: L + i * bw, y: H - 9, "font-size": 11}, n.night.slice(5)));
   });
+  svg.append(el("text", {x: W - R, y: T + 6, "text-anchor": "end", "font-size": 11.5}, t("share of the depot night spent loaded · amber = documented leak")));
 }
 
-Object.assign(EN_T, {"sc.rows": "{0} real readings read", "sc.night": "{0}: {1}% ({2}× normal, rank {3} of {4})"});
+Object.assign(EN_T, {"sc.rows": "{0} real readings read", "sc.night": "{0}: {1}% ({2}× normal, rank {3} of {4})",
+  "sc.top": "all ranked within the top {0} of {1} depot nights", "sc.cyc": "on the {0} nights where the compressor cycled; looser than in simulation",
+  "sc.note": "Continuous-loading nights: {0}. Frozen-signal nights excluded by the sensor-health rule: {1}."});
 Object.assign(TA, {
   "Self-calibration on real data: MetroPT-3 depot nights": "உண்மைத் தரவில் சுய அளவீடு: MetroPT-3 பணிமனை இரவுகள்",
-  "The same load/unload leak test, run on real TP3 pressure and motor current while the train is parked (01:00-05:00). No nameplate is needed for the leak fraction, so nothing is assumed.":
-    "அதே சுமை/சுமையற்ற கசிவுச் சோதனை, ரயில் நிறுத்தப்பட்டிருக்கும்போது (01:00-05:00) உண்மையான TP3 அழுத்தம் மற்றும் மோட்டார் மின்னோட்டத்தில். கசிவுப் பங்குக்குப் பெயர்ப்பலகை தேவையில்லை; எதுவும் அனுமானிக்கப்படவில்லை.",
+  "The same load/unload physics, run on real TP3 pressure and motor current while the train is parked (01:00-05:00). A severe leak keeps the compressor loaded all night, so the share of the night spent loaded is the signal. No nameplate is needed.":
+    "அதே சுமை/சுமையற்ற இயற்பியல், ரயில் நிறுத்தப்பட்டிருக்கும்போது (01:00-05:00) உண்மையான TP3 அழுத்தம் மற்றும் மோட்டார் மின்னோட்டத்தில். கடும் கசிவு அமுக்கியை இரவு முழுவதும் சுமையில் வைத்திருக்கும்; எனவே சுமையில் இருந்த நேரப் பங்கே சிக்னல். பெயர்ப்பலகை தேவையில்லை.",
   "Not run yet.": "இன்னும் இயக்கப்படவில்லை.", "Depot nights identified": "அடையாளம் காணப்பட்ட பணிமனை இரவுகள்",
   "Estimators agree": "மதிப்பீடுகள் ஒத்துப்போகின்றன", "median time-ratio vs slope-ratio gap on real data": "உண்மைத் தரவில் நேர vs சரிவு விகித இடைவெளி (இடைநிலை)",
   "Normal-night leak": "சாதாரண இரவுக் கசிவு", "of compressor capacity, median": "அமுக்கி கொள்ளளவில், இடைநிலை",
   "Documented-leak nights rank higher": "பதிவான கசிவு இரவுகள் உயர் தரவரிசை", "probability vs a normal night (0.5 = chance)": "சாதாரண இரவை விட நிகழ்தகவு (0.5 = தற்செயல்)",
-  "documented leak": "பதிவான கசிவு", "sc.rows": "{0} உண்மை அளவீடுகள் படிக்கப்பட்டன", "sc.night": "{0}: {1}% (சாதாரணத்தின் {2}×, {4} இல் {3}வது)"
+  "documented leak": "பதிவான கசிவு",
+  "Documented leaks near the top": "பதிவான கசிவுகள் முன்னணியில்", "Normal-night duty": "சாதாரண இரவு சுமை நேரம்",
+  "Continuous nights that were documented": "பதிவான தொடர் இயக்க இரவுகள்",
+  "probability a documented-leak night out-ranks a normal one (0.5 = chance; synthetic AI scored 0.58)": "பதிவான கசிவு இரவு சாதாரண இரவை முந்தும் நிகழ்தகவு (0.5 = தற்செயல்; உருவக AI 0.58)",
+  "of 01:00-05:00 spent loaded (median); documented-leak nights: 100%": "01:00-05:00 இல் சுமையில் இருந்த நேரம் (இடைநிலை); பதிவான கசிவு இரவுகள்: 100%",
+  "the rest may be unrecorded leaks or other night use: the data cannot say": "மீதமுள்ளவை பதிவாகாத கசிவு அல்லது பிற இரவுப் பயன்பாடாக இருக்கலாம்: தரவு சொல்லவில்லை",
+  "share of the depot night spent loaded · amber = documented leak": "பணிமனை இரவில் சுமையில் இருந்த பங்கு · அம்பர் = பதிவான கசிவு",
+  "sc.top": "அனைத்தும் {1} இரவுகளில் முதல் {0} க்குள்", "sc.cyc": "அமுக்கி சுழன்ற {0} இரவுகளில்; உருவகத்தை விடத் தளர்வு",
+  "sc.note": "தொடர் இயக்க இரவுகள்: {0}. உறைந்த சிக்னல் இரவுகள் விலக்கப்பட்டன: {1}.", "sc.rows": "{0} உண்மை அளவீடுகள் படிக்கப்பட்டன", "sc.night": "{0}: {1}% (சாதாரணத்தின் {2}×, {4} இல் {3}வது)"
 });
 loadSelfcalEvidence();
