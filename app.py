@@ -295,9 +295,17 @@ def maintenance_create():
     try:
         role, label, data = gate("create_ticket")
         operator = f"{data.get('operator', 'operator')} ({label})"
+        zone = data.get("leak_zone")
+        if zone is not None:
+            from leak_locator import ZONES
+            if (not isinstance(zone, dict) or zone.get("zone") not in [z["id"] for z in ZONES]
+                    or isinstance(zone.get("seed"), bool) or not isinstance(zone.get("seed"), int)
+                    or not 1 <= zone["seed"] <= 1_000_000):
+                raise ValueError("leak_zone must be {seed: 1-1000000, zone: a Leak Hunter zone id}.")
+            zone = {"seed": zone["seed"], "zone": zone["zone"]}
         return jsonify(create_ticket(data.get("fault_type", "unknown"), data.get("title", "Manual ticket"),
                                      evidence=data.get("evidence", ""), predicted=data.get("predicted"),
-                                     operator=operator))
+                                     operator=operator, leak_zone=zone))
     except ValueError as exc:
         return jsonify(error=str(exc)), 403
 
@@ -384,6 +392,332 @@ def stage4_modelhistory():
     return jsonify(model_history())
 
 
+
+# ---------------- Stage 5: live edge ingestion ----------------
+from edge_bridge import ingest as _edge_ingest, snapshot as _edge_snapshot, buffer_status as _edge_status
+from edge_bridge import readings as _edge_readings
+
+
+@app.post("/api/edge/ingest")
+def edge_ingest_route():
+    payload = request.get_json(silent=True)
+    return jsonify(_edge_ingest(payload if payload is not None else []))
+
+
+@app.get("/api/edge/status")
+def edge_status_route():
+    return jsonify(_edge_status())
+
+
+@app.get("/api/edge/snapshot")
+def edge_snapshot_route():
+    return jsonify(_edge_snapshot())
+
+
+# ---------------- Self-calibrating twin, Leak Hunter, advisors ----------------
+from advisor import heat_recovery, opportunity_ladder, vsd_upgrade
+from leak_locator import BRANCHES, decay_test, plant_layout, survey
+from longrun import run_longrun, validate_identification
+from twin_id import identify_stream
+
+
+def _tariff(value=None):
+    """Explicit tariff if given, otherwise the saved site calibration."""
+    if value is None:
+        value = get_config().get("tariff_inr_kwh", 7.0)
+    if isinstance(value, str):
+        try:
+            value = float(value)
+        except ValueError:
+            raise ValueError("Enter an illustrative electricity price from ₹0 to ₹100 per kWh.")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 100:
+        raise ValueError("Enter an illustrative electricity price from ₹0 to ₹100 per kWh.")
+    return round(float(value), 2)
+
+
+def _seed(value, default=11):
+    if value is None:
+        return default
+    try:
+        seed = int(value)
+    except (TypeError, ValueError):
+        raise ValueError("seed must be a whole number.")
+    if not 1 <= seed <= 1_000_000:
+        raise ValueError("seed must be between 1 and 1,000,000.")
+    return seed
+
+
+def _longrun(repair=True, tariff=None):
+    return run_longrun(14, bool(repair), _tariff(tariff))
+
+
+@app.get("/api/twin/longrun")
+def twin_longrun():
+    try:
+        return jsonify(_longrun(request.args.get("repair", "1") != "0", request.args.get("tariff")))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.get("/api/twin/validation")
+def twin_validation():
+    return jsonify(validate_identification())
+
+
+@app.post("/api/twin/identify")
+def twin_identify():
+    """Identify on a 30-minute scenario or on the live edge buffer."""
+    try:
+        data = payload()
+        source = data.get("source", "scenario")
+        if source == "edge":
+            rows = _edge_readings()
+            if len(rows) < 120:
+                raise ValueError("The edge buffer needs at least 2 minutes of readings before identification.")
+            # With the node's machine-on contact the buffer already says which
+            # seconds were idle. Without it, the gateway schedules this call
+            # inside a known idle window (night / lunch), so mark it idle.
+            has_contact = any(r.get("production_source") == "contact" for r in rows)
+            if not has_contact and data.get("idle_window", True):
+                rows = [dict(r, production_active=False) for r in rows]
+        elif source == "scenario":
+            scenario = data.get("scenario", "leak")
+            if scenario not in SCENARIOS:
+                raise ValueError("Choose normal, leak, unloaded, filter or worn.")
+            rows = run_simulation(scenario)["readings"]
+        else:
+            raise ValueError("source must be 'scenario' or 'edge'.")
+        result = identify_stream([r["pressure_bar"] for r in rows], [r["power_kw"] for r in rows],
+                                 [r.get("production_active", False) for r in rows],
+                                 volume_hint_m3=get_config().get("receiver_volume_m3"))
+        result["source"] = source
+        return jsonify(result)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.get("/api/overview")
+def overview():
+    try:
+        tariff = _tariff(request.args.get("tariff"))
+        lr = _longrun(True, tariff)
+        tickets = list_tickets()
+        return jsonify({
+            "data_mode": "simulation", "site": get_config().get("site_name"), "tariff_inr_kwh": tariff,
+            "summary": lr["summary"], "identified": lr["identified"], "events": lr["events"],
+            "daily": lr["daily"], "ladder": opportunity_ladder(lr, tariff),
+            "open_tickets": sum(t["state"] not in ("resolved", "cancelled") for t in tickets),
+            "resolved_tickets": sum(t["state"] == "resolved" for t in tickets),
+        })
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.get("/api/leaks/layout")
+def leaks_layout():
+    try:
+        return jsonify(plant_layout(_seed(request.args.get("seed"))))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.post("/api/leaks/test")
+def leaks_test():
+    try:
+        data = payload()
+        branches = data.get("open_branches", [])
+        if not isinstance(branches, list) or any(b not in BRANCHES for b in branches):
+            raise ValueError(f"open_branches must list zones from: {', '.join(BRANCHES)}.")
+        index = data.get("test_index", 0)
+        if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index <= 50:
+            raise ValueError("test_index must be a whole number from 0 to 50.")
+        return jsonify(decay_test(_seed(data.get("seed")), branches, index))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.post("/api/leaks/survey")
+def leaks_survey():
+    try:
+        data = payload()
+        lr = _longrun(True, data.get("tariff"))
+        sp = lr["identified"].get("specific_power_kw_per_m3_min") or None
+        kwargs = {"specific_power": sp} if sp else {}
+        return jsonify(survey(_seed(data.get("seed")), _tariff(data.get("tariff")),
+                              reveal=bool(data.get("reveal", False)), **kwargs))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.post("/api/advisor/heat")
+def advisor_heat():
+    try:
+        data = payload()
+        lr = _longrun(True, data.get("tariff"))
+        kwargs = {k: data[k] for k in ("fuel", "recoverable_pct", "usable_pct", "inlet_c", "outlet_c",
+                                        "fuel_price", "kit_cost_inr") if k in data}
+        return jsonify(heat_recovery(lr["summary"]["monthly_kwh"], **kwargs))
+    except (ValueError, TypeError) as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.post("/api/advisor/vsd")
+def advisor_vsd():
+    try:
+        data = payload()
+        tariff = _tariff(data.get("tariff"))
+        lr = _longrun(True, tariff)
+        kwargs = {k: data[k] for k in ("min_speed_pct", "drive_loss_pct", "upgrade_cost_inr") if k in data}
+        for key, value in kwargs.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+                raise ValueError(f"{key} must be a non-negative number.")
+        return jsonify(vsd_upgrade(lr["hourly"], lr["summary"]["days"], tariff, **kwargs))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+# ---------------- Virtual edge node, bring-your-own CSV, owner report ----------------
+from csv_import import identify_csv, sample_csv
+from edge_bridge import clear as _edge_clear, readings_since as _edge_since, totals as _edge_totals
+from edge_emulator import FAULTS, EmulatorRunner
+from owner_report import build_context
+from stage4 import sensor_health as _sensor_health
+
+_emulator = EmulatorRunner(_edge_ingest, speed=20)
+CSV_UPLOAD_LIMIT = 8 * 1024 * 1024
+
+
+@app.post("/api/edge/emulator")
+def edge_emulator_control():
+    """Start/stop the virtual edge node and drive the virtual plant."""
+    try:
+        data = payload()
+        action = data.get("action")
+        if action == "start":
+            speed = data.get("speed", 20)
+            if isinstance(speed, bool) or not isinstance(speed, int) or not 1 <= speed <= 120:
+                raise ValueError("speed must be a whole number from 1 to 120.")
+            _emulator.speed = speed
+            _emulator.start()
+        elif action == "stop":
+            _emulator.stop()
+        elif action == "production":
+            with _emulator.lock:
+                _emulator.plant.set_production(bool(data.get("on", True)))
+        elif action == "leak":
+            with _emulator.lock:
+                _emulator.plant.set_new_leak(bool(data.get("on", True)))
+        elif action == "fault":
+            fault = data.get("fault")
+            if fault not in FAULTS:
+                raise ValueError(f"fault must be one of {', '.join(FAULTS)}.")
+            with _emulator.lock:
+                _emulator.plant.inject(fault)
+        elif action == "reset":
+            _emulator.stop()
+            _edge_clear()
+            _emulator.plant.__init__()
+            _emulator.sent = 0
+        else:
+            raise ValueError("action must be start, stop, production, leak, fault or reset.")
+        return jsonify(_emulator.status())
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.get("/api/edge/live")
+def edge_live():
+    """Everything the Live gateway screen needs in one poll."""
+    try:
+        since = int(request.args.get("since", 0))
+    except ValueError:
+        return jsonify(error="since must be a whole number."), 400
+    rows = _edge_readings()
+    health = None
+    if len(rows) >= 60:
+        health = _sensor_health(rows[-600:], get_config())
+        health = {"overall": health["overall"], "issues": health["issues"][:4],
+                  "sensors": {k: v["status"] for k, v in health["sensors"].items()}}
+    snap = _edge_snapshot()
+    return jsonify({"emulator": _emulator.status(), "status": _edge_status(), "totals": _edge_totals(),
+                    "rows": [{"t": r["second"], "p": round(r["pressure_bar"], 3), "kw": round(r["power_kw"], 2),
+                              "prod": r["production_active"]} for r in _edge_since(since)],
+                    "health": health,
+                    "alerts": [{"key": a["key"], "title": a["title"], "evidence": a["evidence"]}
+                               for a in snap.get("alerts", [])],
+                    "anomaly": snap.get("anomaly")})
+
+
+@app.post("/api/twin/upload")
+def twin_upload():
+    """Identify a plant from an uploaded logger CSV (multipart field 'csv')."""
+    try:
+        request.max_content_length = CSV_UPLOAD_LIMIT
+        upload = request.files.get("csv")
+        if upload is None:
+            raise ValueError("Attach the CSV as a form field named 'csv'.")
+        try:
+            text = upload.read().decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise ValueError("The file is not UTF-8 text. Export it from Excel as 'CSV UTF-8'.")
+
+        def number(name, default):
+            raw = request.form.get(name)
+            if raw in (None, ""):
+                return default
+            try:
+                return float(raw)
+            except ValueError:
+                raise ValueError(f"{name} must be a number.")
+
+        return jsonify(identify_csv(text, fad_nominal=number("fad", 0.9), nameplate_kw=number("kw", 7.5),
+                                    tariff=number("tariff", _tariff()),
+                                    kw_per_amp=number("kw_per_amp", 3 ** 0.5 * 415 * 0.86 / 1000)))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.get("/api/twin/sample.csv")
+def twin_sample_csv():
+    response = app.response_class(sample_csv(), mimetype="text/csv")
+    response.headers["Content-Disposition"] = 'attachment; filename="FactoryAirTwin_sample_logger_SIMULATED.csv"'
+    return response
+
+
+@app.get("/api/evidence/selfcal")
+def evidence_selfcal():
+    """Self-calibration on real MetroPT-3 data, if metropt_selfcal.py has been run."""
+    import json as _json
+    from metropt_selfcal import REPORT
+    if not REPORT.exists():
+        return jsonify(error="Not run yet. Download MetroPT-3 and run metropt_selfcal.py."), 404
+    return jsonify(_json.loads(REPORT.read_text(encoding="utf-8")))
+
+
+@app.get("/report/owner")
+def report_owner():
+    lang = request.args.get("lang", "en")
+    tariff = _tariff()
+    lr = _longrun(True, tariff)
+    overview_data = {"site": get_config().get("site_name"), "summary": lr["summary"], "identified": lr["identified"],
+                     "events": lr["events"], "daily": lr["daily"], "ladder": opportunity_ladder(lr, tariff)}
+    return render_template("owner_report.html", **build_context(overview_data, list_tickets(), lang))
+
+
+def _warm_caches():
+    """Pre-compute the two-week twin so the first dashboard visit is instant."""
+    try:
+        _longrun(True)
+        validate_identification()
+    except Exception:  # noqa: BLE001 - warming is best-effort; routes compute on demand
+        pass
+
+
 if __name__ == "__main__":
-    print("FactoryAir Twin: open http://127.0.0.1:5001 in your browser.")
-    app.run(host="127.0.0.1", port=5001, debug=False)
+    import os
+    import threading
+    threading.Thread(target=_warm_caches, daemon=True).start()
+    host = os.environ.get("FACTORYAIR_HOST", "127.0.0.1")
+    port = int(os.environ.get("FACTORYAIR_PORT", "5001"))
+    print(f"FactoryAir Twin: open http://{host}:{port} in your browser.")
+    app.run(host=host, port=port, debug=False)

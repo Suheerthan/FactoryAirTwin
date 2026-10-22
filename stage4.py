@@ -181,8 +181,13 @@ def sensor_health(readings, config=None):
         # power states; only Loaded operation should show varying power.
         check("power_kw", "power_kw", -0.01, max_power, 0.0005,
               active_when=lambda row: row.get("state") == "Loaded"),
-        check("temperature_c", "temperature_c", -10.0, 95.0, 0.01),
     ]
+    # Temperature is optional: the two-signal edge node has no thermometer.
+    # A sensor that is absent from every row is "not fitted", not "failed".
+    if any(row.get("temperature_c") is not None for row in readings):
+        statuses.append(check("temperature_c", "temperature_c", -10.0, 95.0, 0.01))
+    else:
+        sensors["temperature_c"] = {"status": "not_fitted", "missing": 0, "out_of_range": 0, "longest_stuck_run": 0}
     if gaps:
         statuses.append("degraded")
     overall = "ok" if all(s == "ok" for s in statuses) else ("failed" if any(s == "failed" for s in statuses) else "degraded")
@@ -306,7 +311,7 @@ def get_ticket(ticket_id, path=None):
     return next((t for t in list_tickets(path) if t["id"] == ticket_id), None)
 
 
-def create_ticket(fault_type, title, evidence="", predicted=None, operator="operator", path=None):
+def create_ticket(fault_type, title, evidence="", predicted=None, operator="operator", path=None, leak_zone=None):
     if fault_type not in FAULT_KEYS + ("unknown",):
         raise ValueError(f"fault_type must be one of {FAULT_KEYS + ('unknown',)}.")
     if not title or not isinstance(title, str) or len(title) > 120:
@@ -325,6 +330,8 @@ def create_ticket(fault_type, title, evidence="", predicted=None, operator="oper
         "logs": [{"at": _now(), "operator": str(operator)[:40] or "operator",
                   "action": "created", "note": "Ticket created."}],
     }
+    if leak_zone:
+        ticket["leak_zone"] = leak_zone
     store["tickets"].append(ticket)
     _save_store(store, path)
     return ticket
@@ -372,6 +379,8 @@ def verify_ticket(ticket_id, operator="operator", path=None):
         _save_store(store, path)
         return ticket["verification"]
     tariff = get_config()["tariff_inr_kwh"]
+    if ticket.get("leak_zone"):
+        return _verify_zone_ticket(ticket, store, path, operator, tariff)
     before = run_simulation(fault, intervention=False, tariff=tariff)
     after = run_simulation(fault, intervention=True, tariff=tariff)
     saved_kwh = before["summary"]["energy_kwh"] - after["summary"]["energy_kwh"]
@@ -397,6 +406,31 @@ def verify_ticket(ticket_id, operator="operator", path=None):
     ticket["logs"].append({"at": _now(), "operator": str(operator)[:40], "action": "verify",
                            "note": f"Before {before['summary']['energy_kwh']:.3f} kWh vs after "
                                    f"{after['summary']['energy_kwh']:.3f} kWh per 30 min."})
+    _save_store(store, path)
+    return ticket["verification"]
+
+
+def _verify_zone_ticket(ticket, store, path, operator, tariff):
+    """Leak Hunter tickets: repeat the valve-isolation survey after repair."""
+    from leak_locator import verify_zone_repair
+    zone = ticket["leak_zone"]
+    result = verify_zone_repair(zone["seed"], zone["zone"], tariff)
+    predicted_inr = (ticket.get("predicted_savings") or {}).get("inr_per_month")
+    deviation = None
+    if isinstance(predicted_inr, (int, float)) and predicted_inr > 0:
+        deviation = round(100 * (result["saved_inr_per_month"] - predicted_inr) / predicted_inr, 1)
+    ticket["state"] = "verifying"
+    ticket["verification"] = {
+        "verified_at": _now(), "status": "measured_simulated", "repair": f"Zone {zone['zone']} repaired (simulated)",
+        "method": "Repeat valve-isolation survey after repair (Leak Hunter)",
+        **result,
+        "saved_kwh_30min": round(result["saved_kwh_per_day"] / 48, 4),
+        "predicted_inr_per_month": predicted_inr, "deviation_pct_vs_predicted": deviation,
+        "note": "Saving = drop in total measured leakage between the before and after surveys; 24x7 leak, monthly.",
+    }
+    ticket["logs"].append({"at": _now(), "operator": str(operator)[:40], "action": "verify",
+                           "note": f"Leakage {result['before_total_m3_min']:.3f} -> "
+                                   f"{result['after_total_m3_min']:.3f} m3/min after repair."})
     _save_store(store, path)
     return ticket["verification"]
 

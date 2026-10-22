@@ -1,6 +1,7 @@
 "use strict";
 const $ = id => document.getElementById(id);
 let simulation = null, cursor = 0, timer = null, busy = false;
+let LANG = "en";  // declared before any top-level call reaches t()
 const ns = "http://www.w3.org/2000/svg";
 const fmt = (value, digits = 2) => value == null ? "N/A" : Number(value).toFixed(digits);
 const time = seconds => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
@@ -58,11 +59,11 @@ function draw() {
   }
   visible.forEach(a => {
     const box=document.createElement("article");box.className=`alert ${a.severity}`;
-    const t=document.createElement("small");t.textContent=tf("alert.first", time(a.second));
+    const when=document.createElement("small");when.textContent=tf("alert.first", time(a.second));
     const h=document.createElement("h3");h.textContent=t(a.title);
     const p=document.createElement("p");p.textContent=a.evidence;
     const action=document.createElement("p");action.textContent=t(a.action);
-    box.append(t,h,p,action);$("alerts").append(box);
+    box.append(when,h,p,action);$("alerts").append(box);
   });
   const eligible = visible.some(a => a.key === simulation.scenario) && simulation.scenario !== "normal";
   $("compare").disabled = !eligible || busy;
@@ -392,8 +393,8 @@ $("setpoint-run").addEventListener("click",runSetpoint);
 $("sequence-run").addEventListener("click",runSequence);
 $("schedule-run").addEventListener("click",runSchedule);
 $("load-sample").addEventListener("click",loadSample);
-loadModelStatus();
-loadScenario();
+// Start after every deferred script has run, so the i18n tables below exist.
+document.addEventListener("DOMContentLoaded", () => { loadModelStatus(); loadScenario(); });
 
 /* ------------------------------ Stage 4 panels ------------------------------ */
 
@@ -572,7 +573,7 @@ $("diag-run").addEventListener("click", () => runDiagnose(false));
 $("diag-ticket").addEventListener("click", () => runDiagnose(true));
 $("comb-run").addEventListener("click", runCombined);
 $("stress-run").addEventListener("click", runStress);
-loadStage4();
+document.addEventListener("DOMContentLoaded", loadStage4);
 
 
 /* --------------------- Stage 4.5: roles / backup / history / i18n --------------------- */
@@ -653,11 +654,10 @@ async function runHistory() {
   } catch (error) { resultBox("history-result", error.message); }
 }
 
-let LANG = "en";
 const TA = {
   /* topbar / chrome */
   "TEAM VOLTS AND BOLTS": "வோல்ட்ஸ் & போல்ட்ஸ் அணி",
-  "SIMULATED DATA · STAGE 4.5": "உருவகத் தரவு · நிலை 4.5",
+  "SIMULATED DATA · NO EQUIPMENT CONNECTED": "உருவகத் தரவு · எந்த உபகரணமும் இணைக்கப்படவில்லை",
   "Role": "பொறுப்பு", "Name": "பெயர்",
   "Operator": "இயக்குநர்", "Maintenance engineer": "பராமரிப்பு பொறியாளர்", "Plant manager": "ஆலை மேலாளர்",
   "SIMULATED · OPERATOR-LED": "உருவகம் · இயக்குநர் தலைமையில்",
@@ -940,6 +940,7 @@ function applyLang(lang) {
   if (typeof simulation !== "undefined" && simulation) draw();
   refreshTickets();
   applyRoleGating();
+  if (typeof window.onLangChange === "function") window.onLangChange();
 }
 
 

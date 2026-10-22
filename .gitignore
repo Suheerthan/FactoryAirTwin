@@ -28,3 +28,7 @@ Thumbs.db
 desktop.ini
 .DS_Store
 MetroPT3*
+
+# ---- Downloaded real datasets (never commit) ----
+data_external/
+.claude/
