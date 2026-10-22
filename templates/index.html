@@ -2,33 +2,105 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="FactoryAir Twin Stage 3 local compressor digital-twin prototype by Team Volts and Bolts.">
+  <meta name="description" content="FactoryAir Twin: a self-calibrating digital twin that finds compressed-air waste from two signals a small factory already has. Team Volts and Bolts.">
   <title>FactoryAir Twin | Compressor monitor</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%230f2730'/%3E%3Cpath d='M7 21a10 10 0 1 1 18 0' fill='none' stroke='%237fc4ea' stroke-width='3'/%3E%3Cpath d='M16 17l6-6' stroke='%23f2a516' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='ai.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='shell.css') }}">
   <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='twin.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='gateway.js') }}"></script>
 </head>
 <body>
-  <header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">F/A</span><div><strong>FactoryAir Twin</strong><span data-i18n="team">TEAM VOLTS AND BOLTS</span></div></div><span class="mode" data-i18n="mode">SIMULATED DATA · STAGE 4.5</span>
-    <span style="display:flex;gap:10px;align-items:center;margin-left:auto">
-      <label style="display:flex;gap:6px;align-items:center;font-size:13px"><span data-i18n="role">Role</span>
-        <select id="role-select" style="padding:4px 6px;border-radius:6px;border:1px solid #9db6ad;background:#0e332d;color:#eaf6f0">
-          <option value="operator" data-i18n style="color:#142c31;background:#fff">Operator</option>
-          <option value="maintenance_engineer" selected data-i18n style="color:#142c31;background:#fff">Maintenance engineer</option>
-          <option value="manager" data-i18n style="color:#142c31;background:#fff">Plant manager</option>
+<div class="shell">
+  <aside class="sidebar" aria-label="Main navigation">
+    <div class="brand">
+      <svg class="brand-gauge" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18" fill="#0a1d24" stroke="#7fc4ea" stroke-width="2"/><path d="M8 27a13 13 0 1 1 24 0" fill="none" stroke="#7fc4ea" stroke-width="3" stroke-linecap="round"/><path d="M29 24.5a13 13 0 0 0 3-6" fill="none" stroke="#f2a516" stroke-width="3" stroke-linecap="round"/><path d="M20 21l7-8" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round"/><circle cx="20" cy="21" r="2.6" fill="#ffffff"/></svg>
+      <div><strong>FactoryAir Twin</strong><span data-i18n="team">TEAM VOLTS AND BOLTS</span></div>
+    </div>
+    <nav class="nav">
+      <a href="#overview" data-view="overview"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span data-i18n>Plant overview</span></a>
+      <a href="#live" data-view="live"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h4l3-7 4 14 3-7h6"/></svg><span data-i18n>Live twin</span></a>
+      <a href="#leaks" data-view="leaks"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h7v6H3zM10 12h11M17 8v8"/><path d="M20 4c1 1.6 1.6 2.6 1.6 3.4a1.6 1.6 0 0 1-3.2 0C18.4 6.6 19 5.6 20 4z"/></svg><span data-i18n>Leak Hunter</span></a>
+      <a href="#gateway" data-view="gateway"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="7" width="14" height="10" rx="2"/><path d="M9 7V4M15 7V4M9 20v-3M15 20v-3M2 10h3M2 14h3M19 10h3M19 14h3"/></svg><span data-i18n>Live gateway</span></a>
+      <a href="#mydata" data-view="mydata"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 13h6M9 17h6"/></svg><span data-i18n>Your data</span></a>
+      <a href="#calibration" data-view="calibration"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3M12 12l4-3"/></svg><span data-i18n>Self-calibration</span></a>
+      <a href="#savings" data-view="savings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12M6 9h12M13 9c0 4-3 5-7 5l8 6M6 4c5 0 7 2 7 5"/></svg><span data-i18n>Savings plan</span></a>
+      <a href="#maintenance" data-view="maintenance"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6a4 4 0 0 0 5 5l-9 9-3-3 9-9a4 4 0 0 1-2-2z"/></svg><span data-i18n>Maintenance</span><b id="nav-tickets" class="nav-count" hidden></b></a>
+      <a href="#trust" data-view="trust"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg><span data-i18n>Evidence & limits</span></a>
+      <a href="#settings" data-view="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span data-i18n>Site setup</span></a>
+    </nav>
+    <div class="side-controls">
+      <label><span data-i18n="role">Role</span>
+        <select id="role-select">
+          <option value="operator" data-i18n>Operator</option>
+          <option value="maintenance_engineer" selected data-i18n>Maintenance engineer</option>
+          <option value="manager" data-i18n>Plant manager</option>
         </select></label>
-      <label style="display:flex;gap:6px;align-items:center;font-size:13px"><span data-i18n="name">Name</span>
-        <input id="operator-name" type="text" value="suhee" maxlength="30" style="width:90px;padding:4px 6px;border-radius:6px;border:1px solid #9db6ad"></label>
-      <button id="lang-toggle" type="button" style="padding:5px 12px;border-radius:6px;border:1px solid #008561;background:#e4f3eb;color:#008561;font-weight:600;cursor:pointer">தமிழ்</button>
-    </span></header>
-  <main>
-    <div class="page-title"><div><p class="eyebrow" data-i18n>COMPRESSOR ROOM / 01</p><h1 data-i18n="h1">Energy & operation monitor</h1><p data-i18n="intro">Replay a 30-minute shift, detect hidden air losses and rank the cheapest fixes.</p></div><a href="#model" data-i18n>Model assumptions</a></div>
+      <label><span data-i18n="name">Name</span><input id="operator-name" type="text" value="suhee" maxlength="30"></label>
+      <button id="lang-toggle" type="button" class="lang">தமிழ்</button>
+      <p class="sim-badge" data-i18n="mode">SIMULATED DATA · NO EQUIPMENT CONNECTED</p>
+    </div>
+  </aside>
+
+  <main id="main">
+    <!-- ============================================================ OVERVIEW -->
+    <section class="view" id="view-overview" data-view="overview" aria-labelledby="ov-title">
+      <div class="hero">
+        <div class="hero-main">
+          <p class="hero-kicker"><span id="ov-site">Compressor room 01</span> · <span data-i18n>last 14 days · simulated</span></p>
+          <h1 id="ov-title"><span id="ov-waste" class="money">₹—</span><span class="hero-unit" data-i18n>/ month of electricity buys no useful air</span></h1>
+          <p class="hero-sub" id="ov-sub">Reading the two-week twin…</p>
+          <div class="hero-facts">
+            <div><strong id="ov-bill">—</strong><span data-i18n>compressor bill / month</span></div>
+            <div><strong id="ov-leakpct">—</strong><span data-i18n>of capacity leaks (last night)</span></div>
+            <div><strong id="ov-verified">—</strong><span data-i18n>repair saving, measured overnight</span></div>
+            <div><strong id="ov-fuel">—</strong><span data-i18n>extra: fuel saved by heat recovery</span></div>
+          </div>
+        </div>
+        <div class="hero-chart">
+          <div class="chart-title"><strong data-i18n>Nightly leak test</strong><span data-i18n>% of compressor capacity · pressure + power only</span></div>
+          <svg id="ov-leak-chart" class="chart" viewBox="0 0 520 220" role="img" aria-label="Nightly leak index over 14 days"></svg>
+        </div>
+      </div>
+
+      <div class="ov-grid">
+        <section class="block story" aria-labelledby="story-title">
+          <h2 id="story-title" data-i18n>What the twin noticed this fortnight</h2>
+          <ol id="ov-story" class="timeline"><li class="muted" data-i18n>Loading events…</li></ol>
+          <div class="report-links"><a class="button-link" href="/report/owner?lang=en" target="_blank" rel="noopener" data-i18n>One-page owner report</a><a class="button-link alt" href="/report/owner?lang=ta" target="_blank" rel="noopener">தமிழ் அறிக்கை</a></div>
+        </section>
+        <section class="block" aria-labelledby="ladder-title">
+          <h2 id="ladder-title" data-i18n>Where the money is, cheapest fix first</h2>
+          <div id="ov-ladder" class="ladder"></div>
+          <p id="ov-ladder-note" class="note"></p>
+        </section>
+        <section class="block phone-block" aria-labelledby="alert-title">
+          <h2 id="alert-title" data-i18n>Alert as the operator receives it</h2>
+          <div class="phone" aria-live="polite">
+            <div class="phone-head"><span class="avatar">FA</span><div><strong>FactoryAir Twin</strong><small data-i18n>maintenance group</small></div></div>
+            <div id="ov-whatsapp" class="bubble">…</div>
+          </div>
+          <p class="note" data-i18n>Message preview only. Delivery through a WhatsApp Business / SMS gateway is a deployment step, not part of this prototype.</p>
+        </section>
+        <section class="block" aria-labelledby="daily-title">
+          <h2 id="daily-title" data-i18n>Daily electricity and what leaks cost</h2>
+          <svg id="ov-daily-chart" class="chart" viewBox="0 0 620 220" role="img" aria-label="Daily kWh with leak share"></svg>
+          <p class="legend"><i class="sw sw-ink"></i><span data-i18n>useful + other kWh</span> <i class="sw sw-amber"></i><span data-i18n>leak kWh (nightly test)</span> <i class="sw sw-grey"></i><span data-i18n>unloaded running</span></p>
+        </section>
+      </div>
+    </section>
+
+    <!-- ============================================================ LIVE -->
+    <section class="view" id="view-live" data-view="live" hidden>
+    <div class="page-title"><div><p class="eyebrow" data-i18n>COMPRESSOR ROOM / 01</p><h1 data-i18n="h1">Energy & operation monitor</h1><p data-i18n="intro">Replay a 30-minute shift, detect hidden air losses and rank the cheapest fixes.</p></div><a href="#trust" data-i18n>Model assumptions</a></div>
     <form id="controls" class="toolbar">
       <label><span data-i18n>Operating scenario</span><select id="scenario"><option value="normal" data-i18n-opt="normal">Normal operation</option><option value="leak" data-i18n-opt="leak">Suspected air leak</option><option value="unloaded" data-i18n-opt="unloaded">Extended unloaded running</option><option value="filter" data-i18n-opt="filter">Progressive filter blockage</option><option value="worn" data-i18n-opt="worn">Worn compressor</option></select></label>
       <label><span data-i18n>Assumed price · ₹/kWh</span><input id="tariff" type="number" min="0" max="100" step="0.1" value="7" required></label>
       <button type="submit" class="primary" id="run" data-i18n="btn.load">Load scenario</button>
       <button type="button" id="export" disabled data-i18n="btn.export">Export full run</button>
-      <span class="rule-label"><span data-i18n>Rules + Stage 2 IF + Stage 3 classifier</span><br><small id="model-status">Checking local models…</small> · <a href="#validation" data-i18n>Evaluation</a></span>
+      <span class="rule-label"><span data-i18n>Rules + Stage 2 IF + Stage 3 classifier</span><br><small id="model-status">Checking local models…</small> · <a href="#trust" data-i18n>Evaluation</a></span>
     </form>
     <p id="error" class="error" role="alert" hidden></p>
     <section class="metrics" aria-label="Current simulated readings">
@@ -74,6 +146,189 @@
       <p id="comparison-action"></p><div class="comparison-results"><div class="savings"><span data-i18n>Electricity reduction</span><strong id="saving-percent">—</strong><p id="saving-detail"></p><small>Calculated for this 30-minute run.<br>The submitted 10% target is not enforced.</small></div><div class="table-wrap"><table><caption class="sr-only">Matched baseline and intervention results</caption><thead><tr><th data-i18n>Metric</th><th data-i18n>Baseline</th><th data-i18n>After action</th></tr></thead><tbody id="comparison-rows"></tbody></table></div></div>
       <p class="note" id="comparison-limitation"></p>
     </section>
+    </section>
+
+    <!-- ============================================================ LEAK HUNTER -->
+    <section class="view" id="view-leaks" data-view="leaks" hidden>
+      <header class="view-head">
+        <h1 data-i18n>Leak Hunter</h1>
+        <p data-i18n>The twin already knows how much air leaks. This tells the maintenance team where to walk first, using the branch valves the plant already has.</p>
+      </header>
+      <div class="hunter">
+        <section class="block schematic-block" aria-labelledby="sch-title">
+          <div class="block-head"><h2 id="sch-title" data-i18n>Air network · click a valve to open or close it</h2>
+            <div class="seed-ctl"><span data-i18n>Plant</span> <strong id="lh-seed">#11</strong> <button id="lh-newplant" type="button" class="ghost" data-i18n>New random plant</button></div></div>
+          <svg id="lh-schematic" class="schematic" viewBox="0 0 560 300" role="img" aria-label="Compressed air network with branch valves"></svg>
+          <div class="hunter-actions">
+            <button id="lh-test" type="button" class="primary" data-i18n>Run 2-minute decay test</button>
+            <button id="lh-survey" type="button" data-i18n>Run full guided survey</button>
+            <label class="check"><input id="lh-reveal" type="checkbox"> <span data-i18n>Show hidden true leaks (grading only)</span></label>
+          </div>
+          <ol id="lh-procedure" class="procedure"></ol>
+        </section>
+        <section class="block" aria-labelledby="decay-title">
+          <h2 id="decay-title" data-i18n>Pressure decay with the compressor stopped</h2>
+          <svg id="lh-decay" class="chart" viewBox="0 0 560 240" role="img" aria-label="Pressure decay traces"></svg>
+          <p id="lh-test-result" class="readout" data-i18n>Open some valves and run a test, or run the full survey.</p>
+        </section>
+      </div>
+      <section class="block" aria-labelledby="alloc-title">
+        <h2 id="alloc-title" data-i18n>Where the leakage is</h2>
+        <div id="lh-alloc" class="alloc"><p class="muted" data-i18n>Run the full guided survey to allocate leakage to each zone.</p></div>
+        <p id="lh-recommend" class="callout" hidden></p>
+        <button id="lh-ticket" type="button" class="primary" hidden data-i18n>Raise repair ticket for the worst zone</button>
+        <p id="lh-ticket-result" class="readout"></p>
+      </section>
+    </section>
+
+    <!-- ============================================================ LIVE GATEWAY -->
+    <section class="view" id="view-gateway" data-view="gateway" hidden>
+      <header class="view-head">
+        <h1 data-i18n>Live gateway</h1>
+        <p data-i18n>The clip-on edge node, running in software. It sends the exact frames the ESP32 firmware will send, through the same validation, rules and self-calibration. Break it on purpose and watch the gateway cope.</p>
+      </header>
+      <div class="pipeline" aria-label="Data pipeline">
+        <div class="stage"><span data-i18n>Virtual edge node</span><strong id="gw-generated">0</strong><small data-i18n>frames generated</small></div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="stage" id="gw-stage-ingest"><span data-i18n>Ingest & validate</span><strong id="gw-accepted">0</strong><small id="gw-rejected">0 rejected</small></div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="stage" id="gw-stage-health"><span data-i18n>Sensor health</span><strong id="gw-health">—</strong><small id="gw-health-note">—</small></div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="stage" id="gw-stage-twin"><span data-i18n>Twin</span><strong id="gw-alerts">0</strong><small data-i18n>rule alerts</small></div>
+      </div>
+      <div class="gw-grid">
+        <section class="block" aria-labelledby="gw-ctl-title">
+          <h2 id="gw-ctl-title" data-i18n>Drive the virtual plant</h2>
+          <div class="btn-row">
+            <button id="gw-start" type="button" class="primary" data-i18n>Start streaming</button>
+            <button id="gw-stop" type="button" data-i18n>Stop</button>
+            <label class="inline"><span data-i18n>Speed</span><select id="gw-speed"><option value="10">10×</option><option value="20" selected>20×</option><option value="60">60×</option><option value="120">120×</option></select></label>
+          </div>
+          <div class="btn-row">
+            <button id="gw-prod" type="button" aria-pressed="false">End shift (go idle)</button>
+            <button id="gw-leak" type="button" aria-pressed="false">Open a new leak</button>
+          </div>
+          <h3 data-i18n>Inject a fault the gateway must survive</h3>
+          <div class="btn-row faults">
+            <button type="button" data-fault="dropout" data-i18n>Wi-Fi dropout 30 s</button>
+            <button type="button" data-fault="stuck" data-i18n>Stuck transmitter</button>
+            <button type="button" data-fault="spike" data-i18n>Impossible spike</button>
+            <button type="button" data-fault="clock" data-i18n>Clock jumps back</button>
+          </div>
+          <button id="gw-reset" type="button" class="ghost" data-i18n>Reset gateway</button>
+          <ul id="gw-log" class="gw-log" aria-live="polite"></ul>
+        </section>
+        <section class="block" aria-labelledby="gw-chart-title">
+          <div class="block-head"><h2 id="gw-chart-title" data-i18n>Last 15 minutes from the node</h2><span id="gw-clock" class="clock-chip">—</span></div>
+          <svg id="gw-chart" class="chart" viewBox="0 0 620 300" role="img" aria-label="Live pressure and power"></svg>
+          <p class="legend"><i class="sw" style="background:#1c6a96"></i><span data-i18n>pressure bar(g)</span> <i class="sw sw-ink"></i><span data-i18n>power kW</span> <i class="sw" style="background:#e3f1f9;border:1px solid #9cc8e3"></i><span data-i18n>production on</span></p>
+        </section>
+      </div>
+      <div class="ov-grid section-gap">
+        <section class="block" aria-labelledby="gw-id-title">
+          <h2 id="gw-id-title" data-i18n>Self-calibration on the live stream</h2>
+          <p class="muted" data-i18n>End the shift, let the plant idle for a few virtual minutes, then identify. The node's machine-on contact tells the twin which seconds were idle.</p>
+          <button id="gw-identify" type="button" data-i18n>Identify from the live buffer</button>
+          <p id="gw-id-result" class="readout"></p>
+        </section>
+        <section class="block" aria-labelledby="gw-rej-title">
+          <h2 id="gw-rej-title" data-i18n>What the gateway rejected or flagged</h2>
+          <ul id="gw-issues" class="plain-list"><li class="muted" data-i18n>Nothing yet.</li></ul>
+          <p class="note"><span data-i18n>Firmware for the real node:</span> <code>firmware/factoryair_edge/factoryair_edge.ino</code> · <span data-i18n>CLI emulator:</span> <code>python edge_emulator.py --speed 20</code></p>
+        </section>
+      </div>
+    </section>
+
+    <!-- ============================================================ YOUR DATA -->
+    <section class="view" id="view-mydata" data-view="mydata" hidden>
+      <header class="view-head">
+        <h1 data-i18n>Try it with your own data</h1>
+        <p data-i18n>Upload a pressure + power (or motor current) log from any data logger or energy meter. The twin finds the idle windows, runs the leak test and prices the waste for that plant.</p>
+      </header>
+      <div class="gw-grid">
+        <section class="block" aria-labelledby="up-title">
+          <h2 id="up-title" data-i18n>Upload a CSV</h2>
+          <form id="up-form" class="up-form">
+            <label class="file-drop"><input id="up-file" type="file" accept=".csv,text/csv" required><span id="up-file-name" data-i18n>Choose a CSV file (up to 8 MB)</span></label>
+            <div class="sched-inputs">
+              <label><span data-i18n>Nameplate FAD m³/min</span><input id="up-fad" type="number" min="0.05" max="200" step="0.01" value="0.9"></label>
+              <label><span data-i18n>Nameplate kW</span><input id="up-kw" type="number" min="0.5" max="2000" step="0.1" value="7.5"></label>
+              <label><span data-i18n>Tariff ₹/kWh</span><input id="up-tariff" type="number" min="0" max="100" step="0.1" value="7"></label>
+            </div>
+            <button id="up-run" type="submit" class="primary" data-i18n>Identify this plant</button>
+          </form>
+          <p class="note"><span data-i18n>No file handy?</span> <a href="/api/twin/sample.csv" data-i18n>Download a 36-hour sample logger file</a>. <span data-i18n>Columns accepted: timestamp, pressure_bar, power_kw or current_a, optional production (1/0).</span></p>
+        </section>
+        <section class="block" aria-labelledby="up-res-title">
+          <h2 id="up-res-title" data-i18n>What the twin found</h2>
+          <div id="up-cards" class="id-grid compact"><p class="muted" data-i18n>Results appear here.</p></div>
+          <p id="up-meta" class="note"></p>
+        </section>
+      </div>
+      <section class="block section-gap" aria-labelledby="up-win-title">
+        <h2 id="up-win-title" data-i18n>Every idle window tested</h2>
+        <div class="table-wrap"><table><thead><tr><th data-i18n>Window</th><th data-i18n>Chosen by</th><th data-i18n>Load cycles</th><th data-i18n>Leak m³/min</th><th data-i18n>Leak %</th><th data-i18n>Storage m³</th><th data-i18n>Confidence</th></tr></thead><tbody id="up-windows"></tbody></table></div>
+      </section>
+    </section>
+
+    <!-- ============================================================ CALIBRATION -->
+    <section class="view" id="view-calibration" data-view="calibration" hidden>
+      <header class="view-head">
+        <h1 data-i18n>The twin calibrates itself</h1>
+        <p data-i18n>No flow meter, no manual tuning. Every quiet night the twin runs a load/unload leak test on the two signals and re-learns this plant: storage volume, leak flow, specific power and motor health.</p>
+      </header>
+      <div class="id-grid" id="id-cards"></div>
+      <div class="ov-grid cal-grid">
+        <section class="block" aria-labelledby="nights-title">
+          <h2 id="nights-title" data-i18n>Every night's test</h2>
+          <div class="table-wrap"><table><thead><tr><th data-i18n>Night</th><th data-i18n>Load cycles</th><th data-i18n>Leak (time ratio)</th><th data-i18n>Leak (slope ratio)</th><th data-i18n>Leak m³/min</th><th data-i18n>Storage m³</th><th data-i18n>Confidence</th><th data-i18n>Hidden true leak</th></tr></thead><tbody id="id-nights"></tbody></table></div>
+          <p class="note" data-i18n>Two independent estimators of the same leak. When they disagree the night is graded down instead of trusted.</p>
+        </section>
+        <section class="block" aria-labelledby="val-title">
+          <h2 id="val-title" data-i18n>Tested on 30 plants it has never seen</h2>
+          <div class="id-grid compact" id="val-cards"></div>
+          <svg id="val-chart" class="chart" viewBox="0 0 520 240" role="img" aria-label="Estimated versus true leak on 30 random plants"></svg>
+          <p id="val-protocol" class="note"></p>
+        </section>
+      </div>
+      <section class="block" aria-labelledby="scen-id-title">
+        <h2 id="scen-id-title" data-i18n>Run the same identification on a 30-minute scenario</h2>
+        <div class="inline-form"><label><span data-i18n>Scenario</span><select id="id-scenario"><option value="leak" data-i18n>Leak</option><option value="normal" data-i18n>Normal</option><option value="unloaded" data-i18n>Unloaded</option><option value="worn" data-i18n>Worn</option><option value="filter" data-i18n>Filter</option></select></label><button id="id-run" type="button" data-i18n>Identify from pressure + power</button></div>
+        <p id="id-result" class="readout"></p>
+      </section>
+    </section>
+
+    <!-- ============================================================ SAVINGS -->
+    <section class="view" id="view-savings" data-view="savings" hidden>
+      <header class="view-head">
+        <h1 data-i18n>Savings plan</h1>
+        <p data-i18n>Every number is re-simulated or calculated from the two-week profile. The twin is allowed to say "don't buy it".</p>
+      </header>
+      <div class="ov-grid">
+        <section class="block" aria-labelledby="heat-title">
+          <h2 id="heat-title" data-i18n>Heat recovery: the saving nobody measures</h2>
+          <p class="muted" data-i18n>About three quarters of compressor electricity leaves as heat in the oil cooler. A plate heat exchanger turns it into hot water.</p>
+          <div class="sched-inputs">
+            <label><span data-i18n>Heat now comes from</span><select id="hr-fuel"><option value="lpg" data-i18n>LPG</option><option value="diesel" data-i18n>Diesel</option><option value="electric" data-i18n>Electric heater</option></select></label>
+            <label><span data-i18n>Usable heat %</span><input id="hr-usable" type="number" min="0" max="100" value="60"></label>
+            <label><span data-i18n>Kit cost ₹</span><input id="hr-cost" type="number" min="0" step="1000" value="65000"></label>
+          </div>
+          <button id="hr-run" type="button" data-i18n>Calculate heat recovery</button>
+          <div id="hr-result" class="opt-result"></div>
+        </section>
+        <section class="block" aria-labelledby="vsd-title">
+          <h2 id="vsd-title" data-i18n>Should this plant buy a variable-speed compressor?</h2>
+          <p class="muted" data-i18n>Replays every hour of the two-week profile through a VSD model and compares it with the energy the fixed-speed machine actually used.</p>
+          <div class="sched-inputs">
+            <label><span data-i18n>Upgrade cost ₹</span><input id="vsd-cost" type="number" min="0" step="5000" value="140000"></label>
+            <label><span data-i18n>Min speed %</span><input id="vsd-min" type="number" min="10" max="60" value="30"></label>
+            <label><span data-i18n>Drive loss %</span><input id="vsd-loss" type="number" min="0" max="10" step="0.5" value="3"></label>
+          </div>
+          <button id="vsd-run" type="button" data-i18n>Replay profile with a VSD</button>
+          <div id="vsd-result" class="opt-result"></div>
+          <svg id="vsd-chart" class="chart" viewBox="0 0 520 200" role="img" aria-label="Average hourly energy fixed speed versus VSD"></svg>
+        </section>
+      </div>
     <section id="optimiser" class="panel optimiser">
       <div class="panel-heading"><div><p class="eyebrow" data-i18n>OPTIMISER / SAVINGS ROADMAP</p><h2 data-i18n="h.optimiser">What should be done first?</h2></div><span class="mode" data-i18n>PRODUCTION-AWARE · SIMULATED</span></div>
       <div class="impact-strip" id="impact-strip">
@@ -92,6 +347,7 @@
         <div class="opt-card">
           <h3 data-i18n>2 · Multi-compressor sequencing</h3>
           <p data-i18n>Simulates a two-compressor room on the same demand schedule and shows which machine should carry base load. The unit with lower specific power should lead.</p>
+          <p class="scope-note" data-i18n>For plants with two compressors. The default site has one, so this saving is not counted in the plant overview.</p>
           <button id="sequence-run" type="button" data-i18n>Compare sequences</button>
           <div id="sequence-result" class="opt-result"></div>
         </div>
@@ -109,32 +365,48 @@
           <button id="schedule-run" type="button" data-i18n>Estimate schedule savings</button>
           <div id="schedule-result" class="opt-result"></div>
         </div>
+        <div class="opt-card">
+          <h3 data-i18n>4 · Combined-action savings</h3>
+          <p data-i18n>Repair + setpoint are measured in ONE combined re-simulation so overlapping savings are never counted twice. Sequencing and scheduling are added separately.</p>
+          <label><span data-i18n>Scenario</span><select id="comb-scenario"><option value="leak" data-i18n>Leak</option><option value="unloaded" data-i18n>Unloaded</option><option value="normal" data-i18n>Normal</option><option value="filter" data-i18n>Filter</option><option value="worn" data-i18n>Worn</option></select></label>
+          <div class="sched-inputs">
+            <label><input id="act-repair" type="checkbox" checked> <span data-i18n>Repair leak</span></label>
+            <label><input id="act-setpoint" type="checkbox" checked> <span data-i18n>Setpoint</span></label>
+            <label><input id="act-sequence" type="checkbox"> <span data-i18n>Sequencing</span></label>
+            <label><input id="act-schedule" type="checkbox"> <span data-i18n>Scheduling</span></label>
+          </div>
+          <button id="comb-run" type="button" data-i18n>Calculate combined savings</button>
+          <div id="comb-result" class="opt-result"></div>
+        </div>
       </div>
       <h3 class="catalog-heading" data-i18n>Ranked intervention catalogue</h3>
       <p class="muted" id="catalog-note" data-i18n>Monthly figures extrapolate the 30-minute pattern continuously; costs are editable illustrative defaults.</p>
       <div class="table-wrap"><table><caption class="sr-only">Ranked interventions with payback</caption><thead><tr><th data-i18n>#</th><th data-i18n>Action</th><th data-i18n>What to do</th><th data-i18n>kWh / month</th><th data-i18n>₹ / month</th><th data-i18n>kg CO₂e / month</th><th data-i18n>Assumed cost</th><th data-i18n>Payback</th></tr></thead><tbody id="catalog-rows"><tr><td colspan="8">Loading catalogue…</td></tr></tbody></table></div>
     </section>
-    <section id="stage4" class="panel optimiser">
-      <div class="panel-heading"><div><p class="eyebrow" data-i18n>STAGE 4 / PRODUCTION READINESS</p><h2 data-i18n="h.stage4">From prototype to plant-ready workflow</h2></div><span class="mode" data-i18n>SIMULATED · OPERATOR-LED</span></div>
-      <div class="optimiser-grid">
+    </section>
+
+    <!-- ============================================================ MAINTENANCE -->
+    <section class="view" id="view-maintenance" data-view="maintenance" hidden>
+      <header class="view-head">
+        <h1 data-i18n>Maintenance</h1>
+        <p data-i18n>From a diagnosis to a verified repair. Every step is logged with who did it, and the saving is measured afterwards, not promised.</p>
+      </header>
+      <section class="block">
+        <h2 data-i18n>Repair tickets</h2>
+        <p class="muted"><span data-i18n>Tickets persist in</span> <code>data/maintenance.json</code><span data-i18n>. Lifecycle: open → acknowledged → in_repair → verifying → resolved, with a full operator log. Verification compares matched before/after simulated runs.</span></p>
+        <div class="table-wrap"><table><caption class="sr-only">Maintenance tickets</caption><thead><tr><th data-i18n>ID</th><th data-i18n>Fault</th><th data-i18n>Title</th><th data-i18n>State</th><th data-i18n>Verification</th><th data-i18n>Actions</th></tr></thead><tbody id="ticket-rows"><tr><td colspan="6">Loading tickets…</td></tr></tbody></table></div>
+      </section>
+      <div class="optimiser-grid section-gap">
         <div class="opt-card">
-          <h3 data-i18n>1 · Plant setup & calibration</h3>
-          <p data-i18n>Site calibration values used by Stage 4 checks and reports. Simulation physics stays on the illustrative demo constants.</p>
-          <div class="sched-inputs">
-            <label><span data-i18n>Site name</span><input id="cfg-site" type="text" maxlength="80"></label>
-            <label><span data-i18n>Rated kW</span><input id="cfg-kw" type="number" min="0.5" max="500" step="0.1"></label>
-            <label><span data-i18n>Receiver m³</span><input id="cfg-vol" type="number" min="0.05" max="50" step="0.05"></label>
-            <label><span data-i18n>Min pressure bar</span><input id="cfg-min" type="number" min="4" max="7.5" step="0.1"></label>
-            <label><span data-i18n>Cut-in bar</span><input id="cfg-in" type="number" min="5.5" max="7.5" step="0.1"></label>
-            <label><span data-i18n>Cut-out bar</span><input id="cfg-out" type="number" min="5.5" max="7.5" step="0.1"></label>
-            <label><span data-i18n>Max pressure bar</span><input id="cfg-max" type="number" min="5" max="12" step="0.1"></label>
-            <label><span data-i18n>Tariff ₹/kWh</span><input id="cfg-tariff" type="number" min="0" max="100" step="0.1"></label>
-          </div>
-          <button id="cfg-save" type="button" data-i18n>Save calibration</button>
-          <div id="cfg-result" class="opt-result"></div>
+          <h3 data-i18n>Fault diagnosis (unknown & multiple faults)</h3>
+          <p data-i18n>Combines rules + Stage 2 + Stage 3 into one decision: a known fault, overlapping faults, or an unknown anomaly worth manual investigation.</p>
+          <label><span data-i18n>Scenario</span><select id="diag-scenario"><option value="leak" data-i18n>Leak</option><option value="unloaded" data-i18n>Unloaded</option><option value="filter" data-i18n>Filter</option><option value="worn" data-i18n>Worn</option><option value="normal" data-i18n>Normal</option></select></label>
+          <button id="diag-run" type="button" data-i18n>Diagnose scenario</button>
+          <button id="diag-ticket" type="button" data-i18n>Create ticket from diagnosis</button>
+          <div id="diag-result" class="opt-result"></div>
         </div>
         <div class="opt-card">
-          <h3 data-i18n>2 · Sensor health monitoring</h3>
+          <h3 data-i18n>Sensor health monitoring</h3>
           <p data-i18n>Checks the raw signal stream for missing, stale, stuck or impossible readings before any AI scoring. Optionally inject synthetic faults to test it.</p>
           <label><span data-i18n>Scenario</span><select id="health-scenario"><option value="normal" data-i18n>Normal</option><option value="leak" data-i18n>Leak</option><option value="unloaded" data-i18n>Unloaded</option><option value="filter" data-i18n>Filter</option><option value="worn" data-i18n>Worn</option></select></label>
           <div class="sched-inputs">
@@ -147,64 +419,27 @@
           <div id="health-result" class="opt-result"></div>
         </div>
         <div class="opt-card">
-          <h3 data-i18n>3 · Fault diagnosis (unknown & multiple faults)</h3>
-          <p data-i18n>Combines rules + Stage 2 + Stage 3 into one decision: a known fault, overlapping faults, or an unknown anomaly worth manual investigation.</p>
-          <label><span data-i18n>Scenario</span><select id="diag-scenario"><option value="leak" data-i18n>Leak</option><option value="unloaded" data-i18n>Unloaded</option><option value="filter" data-i18n>Filter</option><option value="worn" data-i18n>Worn</option><option value="normal" data-i18n>Normal</option></select></label>
-          <button id="diag-run" type="button" data-i18n>Diagnose scenario</button>
-          <button id="diag-ticket" type="button" data-i18n>Create ticket from diagnosis</button>
-          <div id="diag-result" class="opt-result"></div>
-        </div>
-        <div class="opt-card">
-          <h3 data-i18n>6 · Combined-action savings</h3>
-          <p data-i18n>Repair + setpoint are measured in ONE combined re-simulation so overlapping savings are never counted twice. Sequencing and scheduling are added separately.</p>
-          <label><span data-i18n>Scenario</span><select id="comb-scenario"><option value="leak" data-i18n>Leak</option><option value="unloaded" data-i18n>Unloaded</option><option value="normal" data-i18n>Normal</option><option value="filter" data-i18n>Filter</option><option value="worn" data-i18n>Worn</option></select></label>
-          <div class="sched-inputs">
-            <label><input id="act-repair" type="checkbox" checked> <span data-i18n>Repair leak</span></label>
-            <label><input id="act-setpoint" type="checkbox" checked> <span data-i18n>Setpoint</span></label>
-            <label><input id="act-sequence" type="checkbox"> <span data-i18n>Sequencing</span></label>
-            <label><input id="act-schedule" type="checkbox"> <span data-i18n>Scheduling</span></label>
-          </div>
-          <button id="comb-run" type="button" data-i18n>Calculate combined savings</button>
-          <div id="comb-result" class="opt-result"></div>
-        </div>
-        <div class="opt-card">
-          <h3 data-i18n>7 · Downloadable PDF report</h3>
-          <p data-i18n>Full prototype summary: calibration, sensor health, diagnosis, energy comparison, combined savings, maintenance history, stress tests, assumptions.</p>
-          <a class="primary" id="pdf-link" href="/api/report/pdf" style="display:inline-block;padding:8px 14px;text-decoration:none" data-i18n>Download PDF report</a>
-          <div id="pdf-note" class="opt-result"><p class="muted" data-i18n>Generated on demand · labelled SIMULATED on every page.</p></div>
-        </div>
-        <div class="opt-card">
-          <h3 data-i18n>8 · Stress-test mode</h3>
+          <h3 data-i18n>Stress-test mode</h3>
           <p data-i18n>Battery of hostile conditions: sensor dropouts, stuck transmitter, heavy noise, a 25% demand jump, and leak + filter at the same time.</p>
           <button id="stress-run" type="button" data-i18n>Run full stress battery</button>
           <div id="stress-result" class="opt-result"></div>
         </div>
-      </div>
-      <div class="optimiser-grid" style="margin-top:14px">
         <div class="opt-card">
-          <h3 data-i18n>👥 User roles & access</h3>
-          <p>Role chosen in the top bar: <strong id="role-current">Maintenance engineer</strong>. Operators raise & acknowledge tickets; engineers repair, verify & resolve; managers also change calibration, run stress tests and restore backups. Enforced by the API.</p>
-          <div id="role-matrix" class="opt-result"></div>
-        </div>
-        <div class="opt-card">
-          <h3 data-i18n>💾 Backup & restore</h3>
-          <p data-i18n>Download calibration, tickets and reports as one ZIP; restore it on any machine. Restore accepts only whitelisted JSON files and validates them first.</p>
-          <button id="backup-run" type="button" data-i18n>Download backup ZIP</button>
-          <label style="display:block;margin-top:8px"><span data-i18n>Restore ZIP</span> <input id="restore-file" type="file" accept=".zip"></label>
-          <button id="restore-run" type="button" data-i18n>Restore from file (manager)</button>
-          <div id="backup-result" class="opt-result"></div>
-        </div>
-        <div class="opt-card">
-          <h3 data-i18n>🕓 Model version history</h3>
-          <p data-i18n>When each local model was trained, with which scikit-learn, and its recorded evaluation. Retrain any time with train_model.py / train_stage3.py.</p>
-          <button id="history-run" type="button" data-i18n>Load model history</button>
-          <div id="history-result" class="opt-result"></div>
+          <h3 data-i18n>Downloadable PDF report</h3>
+          <p data-i18n>Full prototype summary: calibration, sensor health, diagnosis, energy comparison, combined savings, maintenance history, stress tests, assumptions.</p>
+          <a class="primary button-link" id="pdf-link" href="/api/report/pdf" data-i18n>Download PDF report</a>
+          <div id="pdf-note" class="opt-result"><p class="muted" data-i18n>Generated on demand · labelled SIMULATED on every page.</p></div>
+          <a class="button-link alt" href="/report/owner" target="_blank" rel="noopener" data-i18n>One-page owner report (EN / தமிழ்)</a>
         </div>
       </div>
-      <h3 class="catalog-heading" data-i18n>4 & 5 · Maintenance workflow & post-repair verification</h3>
-      <p class="muted"><span data-i18n>Tickets persist in</span> <code>data/maintenance.json</code><span data-i18n>. Lifecycle: open → acknowledged → in_repair → verifying → resolved, with a full operator log. Verification compares matched before/after simulated runs.</span></p>
-      <div class="table-wrap"><table><caption class="sr-only">Maintenance tickets</caption><thead><tr><th data-i18n>ID</th><th data-i18n>Fault</th><th data-i18n>Title</th><th data-i18n>State</th><th data-i18n>Verification</th><th data-i18n>Actions</th></tr></thead><tbody id="ticket-rows"><tr><td colspan="6">Loading tickets…</td></tr></tbody></table></div>
     </section>
+
+    <!-- ============================================================ EVIDENCE -->
+    <section class="view" id="view-trust" data-view="trust" hidden>
+      <header class="view-head">
+        <h1 data-i18n>Evidence & limits</h1>
+        <p data-i18n>What has been tested, on what data, and what has not. Every screen in this prototype runs on simulated physics; the real-data study below says how far that transfers.</p>
+      </header>
     <section id="validation" class="panel validation">
       <div class="panel-heading"><div><p class="eyebrow" data-i18n>MODEL EVALUATION / SIMULATED DATA</p><h2 data-i18n="h.validation">How well did the detectors perform?</h2></div><button id="download-report" type="button" disabled data-i18n>Download Stage 2 report</button></div>
       <p id="validation-message" data-i18n>Train the local model to see results from separate test runs.</p>
@@ -236,9 +471,73 @@
         </div>
       </div>
     </section>
-    <details id="connectivity" class="panel assumptions"><summary data-i18n>Edge connectivity & integration (Modbus / MQTT)</summary><div class="connectivity-body"><p>FactoryAir Twin is edge-first: one power measurement at the compressor panel (PowerTag-class), one header pressure transmitter and controller state are enough. The edge device publishes readings and detection windows locally; only operator-approved recommendations are acted on.</p><button id="load-sample" type="button" data-i18n>Show sample MQTT payload & Modbus map</button><pre id="sample-payload" hidden></pre><p id="sample-note" class="muted"></p></div></details>
-    <details id="model" class="panel assumptions"><summary data-i18n>Model assumptions & prototype limits</summary><div class="assumption-grid"><div><h3 data-i18n>Illustrative equipment</h3><p>One 7.5 kW compressor; 0.50 m³ receiver; nominal air delivery 0.90 m³/min at reference conditions. Pressure controller loads at 6.4 bar(g) and unloads at 7.2 bar(g).</p><p>Air flows use the same 1.01325 bar reference pressure and assumed constant temperature. The receiver balance updates once per simulated second.</p></div><div><h3 data-i18n>What the results mean</h3><p>A production cycle takes 15 seconds. It counts as accepted only when the demo minimum pressure is met throughout the cycle. This is a pressure-only proxy; real product quality is not modelled.</p><p>The replay keeps the original fixed, noise-free demonstration settings. Training and test simulations vary demand, equipment parameters and sensor noise. Startup transients, motor wear limits and minimum restart times remain unmodelled.</p></div><div><h3 data-i18n>Stage 3 additions</h3><p>Filter blockage is simulated as a progressive inlet restriction (flow ×0.75 after 5 minutes); wear as degraded flow (×0.88) and higher power (×1.06). Detection uses loaded pressure-climb rate and power-versus-map ratios.</p><p>The optimiser only recommends; every action is re-simulated with production guardrails before and after. Monthly money and CO₂e figures are extrapolations of one 30-minute pattern and labelled illustrative.</p></div></div></details>
-    <footer><span data-i18n="footer.a">FactoryAir Twin · Challenge 04: Smart Manufacturing</span><span data-i18n="footer.b">Local prototype · STAGE 4.5 · One compressor room</span></footer>
+      <section class="block section-gap" aria-labelledby="selfcal-real-title">
+        <h2 id="selfcal-real-title" data-i18n>Self-calibration on real data: MetroPT-3 depot nights</h2>
+        <p class="muted" data-i18n>The same load/unload leak test, run on real TP3 pressure and motor current while the train is parked (01:00-05:00). No nameplate is needed for the leak fraction, so nothing is assumed.</p>
+        <div id="sc-cards" class="id-grid compact"><p class="muted" id="sc-empty" data-i18n>Not run yet.</p></div>
+        <svg id="sc-chart" class="chart" viewBox="0 0 640 220" role="img" aria-label="Nightly leak fraction on MetroPT-3" hidden></svg>
+        <p id="sc-note" class="note"></p>
+      </section>
+      <section class="block section-gap" aria-labelledby="real-title">
+        <h2 id="real-title" data-i18n>Real-data check: UCI MetroPT-3 (1.5 million readings)</h2>
+        <div class="id-grid compact">
+          <div class="id-card"><span data-i18n>Synthetic threshold on real data</span><strong>0</strong><small data-i18n>windows flagged: it does not transfer uncalibrated</small></div>
+          <div class="id-card"><span data-i18n>Ranking skill (AUC)</span><strong>0.58</strong><small data-i18n>weak but above chance</small></div>
+          <div class="id-card"><span data-i18n>Leak share in top-score cluster</span><strong>2.35×</strong><small data-i18n>4.68% vs 1.99% base rate</small></div>
+        </div>
+        <p class="note" data-i18n>Conclusion: the anomaly model transfers directionally, not calibrated. That is why the field version recalibrates per site (recalibrate.py) and why the self-calibrating physics test, not the ML model, sets the money figures.</p>
+      </section>
+      <section class="block section-gap">
+        <h2 data-i18n>Model version history</h2>
+        <p class="muted" data-i18n>When each local model was trained, with which scikit-learn, and its recorded evaluation. Retrain any time with train_model.py / train_stage3.py.</p>
+        <button id="history-run" type="button" data-i18n>Load model history</button>
+        <div id="history-result" class="opt-result"></div>
+      </section>
+    <details id="model" class="panel assumptions" open><summary data-i18n>Model assumptions & prototype limits</summary><div class="assumption-grid"><div><h3 data-i18n>Illustrative equipment</h3><p>One 7.5 kW compressor; 0.50 m³ receiver; nominal air delivery 0.90 m³/min at reference conditions. Pressure controller loads at 6.4 bar(g) and unloads at 7.2 bar(g).</p><p>Air flows use the same 1.01325 bar reference pressure and assumed constant temperature. The receiver balance updates once per simulated second.</p></div><div><h3 data-i18n>What the results mean</h3><p>A production cycle takes 15 seconds. It counts as accepted only when the demo minimum pressure is met throughout the cycle. This is a pressure-only proxy; real product quality is not modelled.</p><p>Monthly figures on the plant overview come from the 14-day calendar (two shifts, Saturday half day, Sunday off), not from repeating one 30-minute run around the clock. The live-twin optimiser cards still extrapolate their 30-minute run 24×7 and say so.</p></div><div><h3 data-i18n>What is not modelled</h3><p>Startup transients, motor restart limits, temperature effects on leak orifices, valve seat leakage during isolation tests and real product quality. Heat-recovery and VSD prices are editable defaults, not quotes.</p><p>The identification needs the nameplate delivery (FAD); a machine delivering below nameplate biases leak and volume estimates by the same few percent, which the validation table shows openly.</p></div></div></details>
+    </section>
+
+    <!-- ============================================================ SETTINGS -->
+    <section class="view" id="view-settings" data-view="settings" hidden>
+      <header class="view-head">
+        <h1 data-i18n>Site setup</h1>
+        <p data-i18n>Nameplate values, who can do what, backups and how a real gateway connects.</p>
+      </header>
+      <div class="optimiser-grid">
+        <div class="opt-card">
+          <h3 data-i18n>Plant setup & calibration</h3>
+          <p data-i18n>Site calibration values used by Stage 4 checks and reports. Simulation physics stays on the illustrative demo constants.</p>
+          <div class="sched-inputs">
+            <label><span data-i18n>Site name</span><input id="cfg-site" type="text" maxlength="80"></label>
+            <label><span data-i18n>Rated kW</span><input id="cfg-kw" type="number" min="0.5" max="500" step="0.1"></label>
+            <label><span data-i18n>Receiver m³</span><input id="cfg-vol" type="number" min="0.05" max="50" step="0.05"></label>
+            <label><span data-i18n>Min pressure bar</span><input id="cfg-min" type="number" min="4" max="7.5" step="0.1"></label>
+            <label><span data-i18n>Cut-in bar</span><input id="cfg-in" type="number" min="5.5" max="7.5" step="0.1"></label>
+            <label><span data-i18n>Cut-out bar</span><input id="cfg-out" type="number" min="5.5" max="7.5" step="0.1"></label>
+            <label><span data-i18n>Max pressure bar</span><input id="cfg-max" type="number" min="5" max="12" step="0.1"></label>
+            <label><span data-i18n>Tariff ₹/kWh</span><input id="cfg-tariff" type="number" min="0" max="100" step="0.1"></label>
+          </div>
+          <button id="cfg-save" type="button" data-i18n>Save calibration</button>
+          <div id="cfg-result" class="opt-result"></div>
+        </div>
+        <div class="opt-card">
+          <h3 data-i18n>User roles & access</h3>
+          <p>Role chosen in the sidebar: <strong id="role-current">Maintenance engineer</strong>. Operators raise & acknowledge tickets; engineers repair, verify & resolve; managers also change calibration, run stress tests and restore backups. Enforced by the API.</p>
+          <div id="role-matrix" class="opt-result"></div>
+        </div>
+        <div class="opt-card">
+          <h3 data-i18n>Backup & restore</h3>
+          <p data-i18n>Download calibration, tickets and reports as one ZIP; restore it on any machine. Restore accepts only whitelisted JSON files and validates them first.</p>
+          <button id="backup-run" type="button" data-i18n>Download backup ZIP</button>
+          <label class="file-label"><span data-i18n>Restore ZIP</span> <input id="restore-file" type="file" accept=".zip"></label>
+          <button id="restore-run" type="button" data-i18n>Restore from file (manager)</button>
+          <div id="backup-result" class="opt-result"></div>
+        </div>
+      </div>
+    <details id="connectivity" class="panel assumptions" open><summary data-i18n>Edge connectivity & integration (Modbus / MQTT)</summary><div class="connectivity-body"><p>FactoryAir Twin is edge-first: one power measurement at the compressor panel (PowerTag-class), one header pressure transmitter and controller state are enough. The edge device publishes readings and detection windows locally; only operator-approved recommendations are acted on.</p><button id="load-sample" type="button" data-i18n>Show sample MQTT payload & Modbus map</button><pre id="sample-payload" hidden></pre><p id="sample-note" class="muted"></p></div></details>
+    </section>
+
+    <footer><span data-i18n="footer.a">FactoryAir Twin · Challenge 04: Smart Manufacturing</span><span data-i18n="footer.b">Local prototype · runs offline · one compressor room</span></footer>
   </main>
+</div>
 </body>
 </html>

@@ -19,6 +19,8 @@ from simulator import PLANT, compressor_map
 ROOT = Path(__file__).resolve().parent
 MODEL_PATH = ROOT / "models" / "factoryair_isolation_forest.joblib"
 METADATA_PATH = ROOT / "models" / "model_metadata.json"
+SITE_MODEL_PATH = ROOT / "models" / "if_model_site.joblib"
+SITE_METADATA_PATH = ROOT / "models" / "model_metadata_site.json"
 REPORT_PATH = ROOT / "reports" / "validation_report.json"
 SCHEMA_VERSION = 2
 WINDOW = 60
@@ -72,15 +74,20 @@ def score_windows(bundle, matrix, windows):
 
 @lru_cache(maxsize=1)
 def load_local_bundle():
-    if not MODEL_PATH.exists() or not METADATA_PATH.exists():
+    import os
+    if os.environ.get("FACTORYAIR_SITE_MODEL") and SITE_MODEL_PATH.exists() and SITE_METADATA_PATH.exists():
+        model_path, metadata_path = SITE_MODEL_PATH, SITE_METADATA_PATH
+    else:
+        model_path, metadata_path = MODEL_PATH, METADATA_PATH
+    if not model_path.exists() or not metadata_path.exists():
         return None, "Model not trained. Run train_model.py, then restart app.py."
     try:
-        metadata = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         if metadata.get("schema_version") != SCHEMA_VERSION or metadata.get("sklearn_version") != sklearn.__version__:
             return None, "Model settings or scikit-learn version changed. Run train_model.py again, then restart app.py."
         # Only the model generated locally by the supplied training script is
         # loaded. The app has no model-upload or arbitrary-file-loading route.
-        bundle = joblib.load(MODEL_PATH)
+        bundle = joblib.load(model_path)
         if bundle.get("feature_names") != FEATURE_NAMES:
             return None, "Model features changed. Train the model again."
         return bundle, None

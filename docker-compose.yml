@@ -1,0 +1,11 @@
+services:
+  twin:
+    build: .
+    ports:
+      - "5001:5001"
+    environment:
+      - FACTORYAIR_HOST=0.0.0.0
+      - FACTORYAIR_SITE_MODEL=0
+    volumes:
+      - ./data:/app/data        # calibration, tickets, reports survive restarts
+      - ./models:/app/models    # site-recalibrated bundles

@@ -2,6 +2,12 @@
 
 Team Volts and Bolts · Yuva Yodha Challenge 04: Smart Manufacturing
 
+> **Software prototype v7 is here.** See **PROTOTYPE_V6.md**: a twin that
+> calibrates itself from pressure + power, a 14-day plant twin with a nightly
+> leak test, Leak Hunter (valve-isolation survey by zone), heat-recovery and
+> VSD advisors, a redesigned owner dashboard (Tamil/English), a virtual edge
+> node with live gateway, CSV upload, owner report and real-data self-calibration. 124 tests.
+
 > **Stage 3 is here.** See **STAGE3.md**: predictive-maintenance scenarios
 > (filter blockage, worn compressor), supervised fault-type classifier
 > (macro-F1 85.9% on held-out synthetic runs), pressure-setpoint optimiser,
