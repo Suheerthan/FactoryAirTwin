@@ -32,3 +32,6 @@ MetroPT3*
 # ---- Downloaded real datasets (never commit) ----
 data_external/
 .claude/
+
+# ---- Office lock files (created while a document is open) ----
+~$*
